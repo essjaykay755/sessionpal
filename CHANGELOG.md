@@ -7,6 +7,15 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.3.2] - 2026-11-06
+
+Opening SessionPal no longer rereads your whole library.
+
+### Changed
+
+- The library from the last scan appears as soon as the app opens, and a fresh scan runs in the background.
+- Scans only reread conversations that changed since the last one, including after a restart. This covers Claude Code, Codex, Cursor, OpenCode and Antigravity.
+
 ## [0.3.1] - 2026-11-06
 
 ### Fixed
