@@ -25,9 +25,13 @@ fn task_failed(error: impl std::fmt::Display) -> String {
 
 #[tauri::command]
 async fn discover_agents() -> Result<Vec<AgentDetection>, String> {
-    tauri::async_runtime::spawn_blocking(agents::discover)
-        .await
-        .map_err(task_failed)
+    tauri::async_runtime::spawn_blocking(|| {
+        let detections = agents::discover();
+        scan_cache::save_detections(&detections);
+        detections
+    })
+    .await
+    .map_err(task_failed)
 }
 
 #[tauri::command]
@@ -37,7 +41,20 @@ async fn list_sessions(
 ) -> Result<Vec<SessionSummary>, String> {
     // Older callers sent no options: scan everything, as before.
     let access = access.unwrap_or_else(ProjectAccess::unrestricted);
-    tauri::async_runtime::spawn_blocking(move || agents::list_sessions(agents.as_deref(), &access))
+    tauri::async_runtime::spawn_blocking(move || {
+        let sessions = agents::list_sessions(agents.as_deref(), &access);
+        scan_cache::save_sessions(&sessions);
+        sessions
+    })
+    .await
+    .map_err(task_failed)
+}
+
+/// The library from the last scan, limited to `agents`, so the UI can show it
+/// at once while a fresh scan runs. Reads only SessionPal's own cache.
+#[tauri::command]
+async fn cached_library(agents: Vec<AgentId>) -> Result<Option<scan_cache::LibrarySnapshot>, String> {
+    tauri::async_runtime::spawn_blocking(move || scan_cache::load_library(&agents))
         .await
         .map_err(task_failed)
 }
@@ -172,12 +189,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            use tauri::Manager;
+            if let Ok(dir) = app.path().app_cache_dir() {
+                scan_cache::init(dir);
+            }
             backup::migrate_legacy_backups(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             discover_agents,
             list_sessions,
+            cached_library,
             project_folders,
             get_session,
             list_backups,

@@ -13,6 +13,7 @@ use crate::util::{
 };
 
 use super::{opencode_db, ParsedSession, RelatedFile};
+use crate::scan_cache::{sqlite_files, SummaryCache};
 
 const MAX_TEXT: usize = 120_000;
 const MAX_TOOL_CONTENT: usize = 24_000;
@@ -44,14 +45,22 @@ pub fn count_sessions(roots: &[PathBuf]) -> u64 {
     count
 }
 
+static DB_CACHE: SummaryCache = SummaryCache::new("opencode-db");
+
 pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
     // Newer OpenCode versions keep sessions in opencode.db. Read those first and
     // skip any JSON copy of the same session left over from before the move.
     let mut sessions: Vec<SessionSummary> = roots
         .iter()
         .filter(|root| opencode_db::is_database(root))
-        .flat_map(|db| opencode_db::scan(db))
+        .flat_map(|db| DB_CACHE.get_or_scan(db, &sqlite_files(db), || opencode_db::scan(db)))
         .collect();
+    let databases: HashSet<PathBuf> = roots
+        .iter()
+        .filter(|root| opencode_db::is_database(root))
+        .cloned()
+        .collect();
+    DB_CACHE.finish_scan(&databases);
     let in_database: HashSet<String> = sessions.iter().map(|session| session.id.clone()).collect();
     for root in roots {
         if opencode_db::is_database(root) {

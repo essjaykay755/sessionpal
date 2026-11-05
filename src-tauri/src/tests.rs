@@ -1149,3 +1149,53 @@ fn folder_access_groups_cwds_without_reading_unless_asked() {
         assert!(folders.is_empty());
     }
 }
+
+#[test]
+fn summary_cache_rescans_only_when_a_watched_file_changes() {
+    use std::cell::Cell;
+    use crate::scan_cache::{sqlite_files, SummaryCache};
+
+    let temp = TempDir::new().unwrap();
+    let db = temp.path().join("state.db");
+    write(&db, "one");
+    let cache = SummaryCache::new("test");
+    let runs = Cell::new(0);
+    let scan = || {
+        runs.set(runs.get() + 1);
+        vec![project_session("/tmp/a", "a", "a")]
+    };
+
+    assert_eq!(cache.get_or_scan(&db, &sqlite_files(&db), scan).len(), 1);
+    assert_eq!(cache.get_or_scan(&db, &sqlite_files(&db), scan).len(), 1);
+    assert_eq!(runs.get(), 1, "an unchanged source is served from the cache");
+
+    // A new write-ahead log means new rows, even though the database is untouched.
+    write(&temp.path().join("state.db-wal"), "pending");
+    cache.get_or_scan(&db, &sqlite_files(&db), scan);
+    assert_eq!(runs.get(), 2);
+
+    write(&db, "one plus more");
+    cache.get_or_scan(&db, &sqlite_files(&db), scan);
+    assert_eq!(runs.get(), 3);
+}
+
+/// Times a full scan of this machine's real agent storage using the on-disk
+/// cache in `SESSIONPAL_CACHE_DIR`. Run twice to see a relaunch:
+/// `SESSIONPAL_CACHE_DIR=/tmp/sp cargo test --release timed_real_scan -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn timed_real_scan() {
+    let dir = std::env::var("SESSIONPAL_CACHE_DIR").expect("set SESSIONPAL_CACHE_DIR");
+    crate::scan_cache::init(PathBuf::from(dir));
+    for agent in AgentId::ALL {
+        let started = std::time::Instant::now();
+        let count = crate::agents::list_sessions(Some(&[agent]), &crate::models::ProjectAccess::default()).len();
+        println!("  {agent:?}: {count} in {:?}", started.elapsed());
+    }
+    let started = std::time::Instant::now();
+    let sessions = crate::agents::list_sessions(None, &crate::models::ProjectAccess::default());
+    println!("scanned {} sessions in {:?}", sessions.len(), started.elapsed());
+    let started = std::time::Instant::now();
+    crate::agents::discover();
+    println!("discovered agents in {:?}", started.elapsed());
+}

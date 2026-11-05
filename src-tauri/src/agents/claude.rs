@@ -37,7 +37,7 @@ pub fn count_sessions(roots: &[PathBuf]) -> u64 {
     count
 }
 
-static CACHE: SummaryCache = SummaryCache::new();
+static CACHE: SummaryCache = SummaryCache::new("claude");
 
 pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
     let mut sessions = Vec::new();
@@ -60,7 +60,7 @@ pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
             }
         }
     }
-    CACHE.retain(&seen);
+    CACHE.finish_scan(&seen);
     sessions
 }
 

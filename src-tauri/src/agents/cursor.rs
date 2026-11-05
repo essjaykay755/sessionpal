@@ -10,6 +10,7 @@ use crate::pricing;
 use crate::util::{earlier, excerpt, file_times, later, parse_time, project_info, truncate_chars};
 
 use super::ParsedSession;
+use crate::scan_cache::{sqlite_files, SummaryCache};
 
 const MAX_TEXT: usize = 120_000;
 const MAX_TOOL_CONTENT: usize = 24_000;
@@ -51,37 +52,47 @@ pub fn count_sessions(roots: &[PathBuf]) -> u64 {
     count
 }
 
+static CACHE: SummaryCache = SummaryCache::new("cursor");
+
 pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
     let mut sessions = Vec::new();
+    let mut seen = HashSet::new();
     for db in roots {
-        let Ok(connection) = open_read_only(db) else {
+        seen.insert(db.clone());
+        sessions.extend(CACHE.get_or_scan(db, &sqlite_files(db), || scan_db(db)));
+    }
+    CACHE.finish_scan(&seen);
+    sessions
+}
+
+fn scan_db(db: &Path) -> Vec<SessionSummary> {
+    let mut sessions = Vec::new();
+    let Ok(connection) = open_read_only(db) else {
+        return sessions;
+    };
+    if !has_table(&connection) {
+        return sessions;
+    }
+    let Ok(mut statement) = connection
+        .prepare("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'")
+    else {
+        return sessions;
+    };
+    let rows = statement.query_map([], |row| {
+        let key: String = row.get(0)?;
+        Ok((key, read_value(row.get_ref(1)?)))
+    });
+    let Ok(rows) = rows else {
+        return sessions;
+    };
+    for row in rows.flatten() {
+        let (key, raw) = row;
+        let Ok(composer) = serde_json::from_slice::<Value>(&raw) else {
             continue;
         };
-        if !has_table(&connection) {
-            continue;
-        }
-        let Ok(mut statement) = connection
-            .prepare("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'")
-        else {
-            continue;
-        };
-        let rows = statement.query_map([], |row| {
-            let key: String = row.get(0)?;
-            Ok((key, read_value(row.get_ref(1)?)))
-        });
-        let Ok(rows) = rows else {
-            continue;
-        };
-        for row in rows.flatten() {
-            let (key, raw) = row;
-            let Ok(composer) = serde_json::from_slice::<Value>(&raw) else {
-                continue;
-            };
-            if let Ok(parsed) = parse_composer(db, &key, &composer, Some(&connection), false) {
-                if parsed.summary.message_count > 0 || !parsed.summary.title.starts_with("Untitled")
-                {
-                    sessions.push(parsed.summary);
-                }
+        if let Ok(parsed) = parse_composer(db, &key, &composer, Some(&connection), false) {
+            if parsed.summary.message_count > 0 || !parsed.summary.title.starts_with("Untitled") {
+                sessions.push(parsed.summary);
             }
         }
     }

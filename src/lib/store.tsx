@@ -29,6 +29,7 @@ import {
   fetchBackups,
   fetchProjectFolders,
   fetchSession,
+  fetchCachedLibrary,
   fetchSessions,
   importNativeBackup,
   isTauri,
@@ -241,6 +242,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   settingsRef.current = settings;
   const booted = useRef(false);
   const hasLocalScan = useRef(false);
+  /** True while the library from the last run is on screen. */
+  const showingCache = useRef(false);
   const toastTimers = useRef<Record<string, number>>({});
 
   const effectiveTheme: "light" | "dark" =
@@ -386,7 +389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // and simulated deletes would look like the user's real library.
         notify(
           "Scan failed",
-          hasLocalScan.current
+          hasLocalScan.current || showingCache.current
             ? "Showing the sessions from the last successful scan. Nothing was changed on disk."
             : "SessionPal couldn't read local agent storage. Nothing was changed on disk.",
           "danger",
@@ -403,6 +406,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (booted.current) return;
     booted.current = true;
     if (isTauri && settingsRef.current.onboarded) {
+      // Show the library from the last scan at once, then refresh it in the
+      // background. A fresh scan that lands first always wins.
+      void fetchCachedLibrary(settingsRef.current.enabledAgents)
+        .then((cached) => {
+          if (!cached || hasLocalScan.current) return;
+          setSessions(cached.sessions);
+          if (cached.detections.length) setDetections(cached.detections);
+          setLastScanAt(cached.scannedAt);
+          // If the fresh scan fails, keep this library on screen with a warning.
+          showingCache.current = true;
+          setScanned(true);
+        })
+        .catch(() => {
+          // The cache is only a head start; the scan below still runs.
+        });
       void loadNative();
     }
   }, [loadNative]);

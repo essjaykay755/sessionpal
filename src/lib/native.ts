@@ -47,6 +47,17 @@ export async function fetchSessions(
   return invoke<import("./types").SessionSummary[]>("list_sessions", { agents, access });
 }
 
+export interface CachedLibrary {
+  scannedAt: string;
+  sessions: import("./types").SessionSummary[];
+  detections: AgentDetection[];
+}
+
+/** The library from the last scan, read from SessionPal's own cache. */
+export async function fetchCachedLibrary(agents: AgentId[]): Promise<CachedLibrary | null> {
+  return invoke<CachedLibrary | null>("cached_library", { agents });
+}
+
 /**
  * The privacy-protected folders these working directories are in. With
  * `request`, each is opened once, so macOS asks the user if they have not

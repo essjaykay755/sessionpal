@@ -66,7 +66,7 @@ fn index_for_session(path: &Path) -> HashMap<String, String> {
         .unwrap_or_default()
 }
 
-static CACHE: SummaryCache = SummaryCache::new();
+static CACHE: SummaryCache = SummaryCache::new("codex");
 
 pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
     let mut sessions = Vec::new();
@@ -96,7 +96,7 @@ pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
             }
         }
     }
-    CACHE.retain(&seen);
+    CACHE.finish_scan(&seen);
     sessions
 }
 

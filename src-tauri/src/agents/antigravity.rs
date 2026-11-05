@@ -18,6 +18,7 @@ use crate::pricing;
 use crate::util::{display_path, excerpt, file_size, iso_from_system_time, iso_now, project_info, truncate_chars};
 
 use super::RelatedFile;
+use crate::scan_cache::{sqlite_files, SummaryCache};
 
 pub const DATABASE_NAME: &str = "conversation_summaries.db";
 const CONVERSATIONS_DIR: &str = "conversations";
@@ -399,20 +400,59 @@ pub fn count_sessions(roots: &[PathBuf]) -> u64 {
         .sum()
 }
 
+static CACHE: SummaryCache = SummaryCache::new("antigravity");
+
 pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
     let mut sessions = Vec::new();
-    let mut seen = HashSet::new();
+    let mut seen_ids = HashSet::new();
+    let mut seen_roots = HashSet::new();
     for root in roots.iter().filter(|root| is_database(root)) {
-        let Ok(loaded) = load(root) else {
-            continue;
-        };
-        for row in loaded.rows.iter().filter(|row| row.depth == 0) {
-            if !seen.insert(row.id.clone()) {
-                continue;
+        seen_roots.insert(root.clone());
+        let summaries = CACHE.get_or_scan(root, &watched_files(root), || scan_index(root));
+        for summary in summaries {
+            if seen_ids.insert(summary.id.clone()) {
+                sessions.push(summary);
             }
-            let segments = transcript(&loaded.connection, &row.id);
-            sessions.push(summarize(&loaded, root, row, &segments));
         }
+    }
+    CACHE.finish_scan(&seen_roots);
+    sessions
+}
+
+/// Summaries also read the per-conversation files next to the index, so any
+/// change there must invalidate the cached scan too.
+fn watched_files(index: &Path) -> Vec<PathBuf> {
+    let mut files = sqlite_files(index);
+    if let Some(dir) = conversations_dir(index) {
+        if let Ok(entries) = fs::read_dir(&dir) {
+            let mut extra: Vec<PathBuf> = entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                // Readers rewrite `-shm` index files, so they never mean new data.
+                .filter(|path| {
+                    path.is_file()
+                        && !path.to_string_lossy().ends_with("-shm")
+                })
+                .collect();
+            extra.sort();
+            files.extend(extra);
+        }
+    }
+    files
+}
+
+fn scan_index(root: &Path) -> Vec<SessionSummary> {
+    let Ok(loaded) = load(root) else {
+        return Vec::new();
+    };
+    let mut seen = HashSet::new();
+    let mut sessions = Vec::new();
+    for row in loaded.rows.iter().filter(|row| row.depth == 0) {
+        if !seen.insert(row.id.clone()) {
+            continue;
+        }
+        let segments = transcript(&loaded.connection, &row.id);
+        sessions.push(summarize(&loaded, root, row, &segments));
     }
     sessions
 }
