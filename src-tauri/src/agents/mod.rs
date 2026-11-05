@@ -74,6 +74,7 @@ pub fn list_sessions() -> Vec<SessionSummary> {
             .then_with(|| a.title.cmp(&b.title))
     });
     make_ids_unique(&mut sessions);
+    crate::projects::assign_project_roots(&mut sessions);
     sessions
 }
 
@@ -136,6 +137,9 @@ pub fn get_session(locator: &SessionLocator) -> Result<SessionDetail, String> {
     }?;
     // Keep the listing's (possibly disambiguated) ID so the UI can match it.
     detail.summary.id = locator.id.clone();
+    // The UI prefers the listing's disambiguated label; this fills the root
+    // for callers that only have the detail.
+    crate::projects::assign_project_roots(std::slice::from_mut(&mut detail.summary));
     Ok(detail)
 }
 

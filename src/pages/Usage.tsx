@@ -16,15 +16,14 @@ import {
   filterRange,
   modelStats,
   overlapsWindow,
+  projectCostStats,
   RANGE_LABELS,
   RANGE_SHORT,
   rangeWindow,
   sessionUsageParts,
   undatedUsageSessions,
-  usageInWindow,
   usageTotals,
 } from "../lib/analytics";
-import { usageTokens } from "../lib/pricing";
 import { useApp } from "../lib/store";
 import type { RangeKey, Tint } from "../lib/types";
 import {
@@ -38,6 +37,8 @@ import {
 } from "../lib/utils";
 import { AgentMark } from "../components/Brand";
 import { AreaChart } from "../components/charts";
+import { percentChange, ProjectCostTable } from "../components/ProjectCostTable";
+import { ProjectDetail } from "../components/ProjectDetail";
 import { PageHeader, PageScroll, SectionTitle } from "../components/PageChrome";
 import { AgentBadge, AnimatedNumber, Button, EstimatedTag, Segmented } from "../components/ui";
 
@@ -46,7 +47,7 @@ const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = (
 ).map((value) => ({ value, label: RANGE_SHORT[value] }));
 
 export default function UsagePage() {
-  const { sessions, settings, openDialog, updateSettings, focusAgent, effectiveTheme, navigate } =
+  const { sessions, settings, openDialog, updateSettings, focusAgent, effectiveTheme } =
     useApp();
   const [range, setRange] = useState<RangeKey>("30d");
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
@@ -70,26 +71,25 @@ export default function UsagePage() {
   const agents = useMemo(() => agentStats(ranged, span), [ranged, span]);
   const models = useMemo(() => modelStats(ranged, span), [ranged, span]);
   const parts = useMemo(() => sessionUsageParts(ranged, span), [ranged, span]);
-  const projects = useMemo(() => {
-    const map = new Map<string, { label: string; sessions: number; tokens: number }>();
-    for (const session of ranged) {
-      const tokens = usageTokens(usageInWindow(session, span));
-      const current = map.get(session.project);
-      if (current) {
-        current.sessions += 1;
-        current.tokens += tokens;
-      } else {
-        map.set(session.project, {
-          label: session.projectLabel,
-          sessions: 1,
-          tokens,
-        });
-      }
-    }
-    return Array.from(map.values())
-      .sort((a, b) => b.tokens - a.tokens)
-      .slice(0, 5);
-  }, [ranged, span]);
+  const projectCosts = useMemo(() => projectCostStats(ranged, span), [ranged, span]);
+  const previousProjectCosts = useMemo(
+    () => projectCostStats(previous, previousWindow),
+    [previous, previousWindow],
+  );
+  const [openProjectKey, setOpenProjectKey] = useState<string | null>(null);
+  const openProject = useMemo(
+    () => projectCosts.find((project) => project.key === openProjectKey) ?? null,
+    [projectCosts, openProjectKey],
+  );
+  const rankByCost = displayedMetric === "cost" && settings.showCosts;
+  const projects = useMemo(
+    () =>
+      [...projectCosts]
+        .sort((a, b) => (rankByCost ? b.cost - a.cost : 0) || b.tokens - a.tokens)
+        .slice(0, 5)
+        .map((project) => ({ ...project, value: rankByCost ? project.cost : project.tokens })),
+    [projectCosts, rankByCost],
+  );
 
   const chartColor =
     displayedMetric === "cost"
@@ -422,20 +422,32 @@ export default function UsagePage() {
 
           <div className="card flex-1 p-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-14 font-bold tracking-[-0.025em]">Top projects</h2>
+              <h2 className="text-14 font-bold tracking-[-0.025em]">
+                Top projects
+                <span className="ml-1.5 text-11 font-medium text-faint">
+                  by {rankByCost ? "est. cost" : "tokens"}
+                </span>
+              </h2>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 px-1.5 text-11"
-                onClick={() => navigate("sessions")}
+                onClick={() =>
+                  document.getElementById("projects")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
               >
-                All sessions
+                All projects
                 <ArrowRight className="h-2.5 w-2.5" />
               </Button>
             </div>
             <div className="mt-3 space-y-2.5">
               {projects.map((project, index) => (
-                <div key={project.label} className="flex items-center gap-2.5">
+                <button
+                  key={project.key}
+                  type="button"
+                  onClick={() => setOpenProjectKey(project.key)}
+                  className="-mx-1.5 flex w-[calc(100%+12px)] items-center gap-2.5 rounded-[8px] px-1.5 py-0.5 text-left transition-colors hover:bg-sunken/45"
+                >
                   <span className="w-3 text-11 tabular text-faint">{index + 1}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
@@ -443,14 +455,21 @@ export default function UsagePage() {
                         {project.label}
                       </span>
                       <span className="shrink-0 text-11 tabular text-faint">
-                        {compact(project.tokens)}
+                        {rankByCost ? (
+                          <>
+                            {money(project.cost)}
+                            {!project.costComplete && "*"}
+                          </>
+                        ) : (
+                          compact(project.tokens)
+                        )}
                       </span>
                     </div>
                     <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/[0.055]">
                       <motion.span
                         initial={false}
                         animate={{
-                          width: `${projects[0]?.tokens ? (project.tokens / projects[0].tokens) * 100 : 0}%`,
+                          width: `${projects[0]?.value ? (project.value / projects[0].value) * 100 : 0}%`,
                         }}
                         transition={{ duration: 0.12 }}
                         className="block h-full rounded-full bg-copper-400/70"
@@ -460,7 +479,7 @@ export default function UsagePage() {
                   <span className="w-7 text-right text-11 tabular text-faint">
                     {project.sessions}
                   </span>
-                </div>
+                </button>
               ))}
               {projects.length === 0 && (
                 <div className="py-5 text-center text-11 text-muted">
@@ -471,6 +490,27 @@ export default function UsagePage() {
           </div>
         </div>
       </section>
+
+      <ProjectCostTable
+        projects={projectCosts}
+        previous={previousProjectCosts}
+        range={range}
+        rangeLabel={RANGE_LABELS[range]}
+        metric={displayedMetric}
+        showCosts={settings.showCosts}
+        color={chartColor}
+        onOpen={(project) => setOpenProjectKey(project.key)}
+      />
+
+      <ProjectDetail
+        project={openProject}
+        range={range}
+        rangeLabel={RANGE_LABELS[range]}
+        span={span}
+        metric={displayedMetric}
+        color={chartColor}
+        onClose={() => setOpenProjectKey(null)}
+      />
 
       <div className="mt-3.5 flex items-center justify-between gap-4 rounded-[15px] border border-line/[0.06] bg-panel/55 px-4 py-3 text-11 text-faint">
         <span className="flex items-center gap-2">
@@ -544,9 +584,4 @@ function StatCard({
     );
   }
   return <div className={className}>{content}</div>;
-}
-
-function percentChange(current: number, previous: number): number | null {
-  if (!previous) return current > 0 ? 100 : null;
-  return ((current - previous) / previous) * 100;
 }

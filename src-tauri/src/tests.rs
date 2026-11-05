@@ -985,3 +985,98 @@ fn pricing_catalog_is_shared_and_complete() {
     );
     assert_eq!(crate::pricing::estimate("some-unknown-model", 1, 1, 1, 1), None);
 }
+
+fn project_session(cwd: &str, project: &str, label: &str) -> crate::models::SessionSummary {
+    crate::models::SessionSummary {
+        id: format!("{cwd}-{project}"),
+        agent: AgentId::Claude,
+        title: String::new(),
+        excerpt: String::new(),
+        project: project.to_string(),
+        project_label: label.to_string(),
+        project_root: String::new(),
+        project_root_label: String::new(),
+        cwd: cwd.to_string(),
+        branch: None,
+        created_at: String::new(),
+        updated_at: String::new(),
+        message_count: 0,
+        tokens: 0,
+        size_bytes: 0,
+        model: None,
+        models: Vec::new(),
+        usage: None,
+        usage_days: Vec::new(),
+        format: "jsonl".to_string(),
+        path: String::new(),
+        deletable: true,
+        tint: "sage".to_string(),
+        icon: "Folder".to_string(),
+    }
+}
+
+#[test]
+fn project_roots_follow_repositories_and_worktrees() {
+    let temp = TempDir::new().unwrap();
+    let base = fs::canonicalize(temp.path()).unwrap();
+    let repo = base.join("work").join("roadster");
+    fs::create_dir_all(repo.join(".git").join("worktrees").join("feature")).unwrap();
+    fs::create_dir_all(repo.join("packages").join("web")).unwrap();
+    // A linked worktree outside the repository.
+    let linked = base.join("trees").join("roadster-feature");
+    write(
+        &linked.join(".git"),
+        &format!("gitdir: {}\n", repo.join(".git/worktrees/feature").display()),
+    );
+    write(&repo.join(".git/worktrees/feature/commondir"), "../..\n");
+    // A submodule is a project of its own.
+    let sub = repo.join("vendor").join("engine");
+    fs::create_dir_all(repo.join(".git/modules/engine")).unwrap();
+    write(&sub.join(".git"), &format!("gitdir: {}\n", repo.join(".git/modules/engine").display()));
+    // An unversioned folder.
+    let loose = base.join("scratch");
+    fs::create_dir_all(&loose).unwrap();
+
+    let home = Some(base.as_path());
+    let root = |path: &Path| crate::projects::git_root(path, home);
+    assert_eq!(root(&repo), Some(repo.clone()));
+    assert_eq!(root(&repo.join("packages/web")), Some(repo.clone()));
+    assert_eq!(root(&linked), Some(repo.clone()));
+    // A deleted worktree nested in the repo still resolves through its ancestors.
+    assert_eq!(root(&repo.join(".claude/worktrees/gone")), Some(repo.clone()));
+    assert_eq!(root(&sub), Some(sub.clone()));
+    assert_eq!(root(&loose), None);
+
+    // A repo in the home folder does not claim folders below it.
+    fs::create_dir_all(base.join(".git")).unwrap();
+    assert_eq!(root(&loose), None);
+    assert_eq!(root(&base), Some(base.clone()));
+}
+
+#[test]
+fn project_root_labels_are_disambiguated_and_grouped() {
+    let temp = TempDir::new().unwrap();
+    let base = fs::canonicalize(temp.path()).unwrap();
+    let work = base.join("work").join("api");
+    let personal = base.join("personal").join("api");
+    fs::create_dir_all(work.join(".git")).unwrap();
+    fs::create_dir_all(personal.join("src")).unwrap();
+    fs::create_dir_all(work.join("server")).unwrap();
+
+    let mut sessions = vec![
+        project_session(work.to_str().unwrap(), "api", "Api"),
+        project_session(work.join("server").to_str().unwrap(), "server", "Server"),
+        project_session(personal.to_str().unwrap(), "api", "Api"),
+        project_session("", "codex", "Codex"),
+    ];
+    crate::projects::assign_project_roots(&mut sessions);
+
+    assert_eq!(sessions[0].project_root, sessions[1].project_root);
+    assert_eq!(sessions[1].project_root_label, "Api · work");
+    assert_eq!(sessions[2].project_root_label, "Api · personal");
+    assert_ne!(sessions[0].project_root, sessions[2].project_root);
+    // Folder slugs are untouched so existing filters keep working.
+    assert_eq!(sessions[1].project, "server");
+    assert_eq!(sessions[3].project_root, "");
+    assert_eq!(sessions[3].project_root_label, "Codex");
+}

@@ -1088,7 +1088,43 @@ function withUsageDays(session: SessionSummary): SessionSummary {
   return { ...session, usageDays };
 }
 
-export const DEMO_SESSIONS: SessionSummary[] = [...FEATURED, ...filler].map(withUsageDays).sort(
+/**
+ * Mirrors the desktop app's project grouping so the preview shows the cases
+ * it handles: worktree sessions count toward their main repository, and two
+ * repositories with the same folder name are told apart by their parent.
+ */
+function withProjectRoots(sessions: SessionSummary[]): SessionSummary[] {
+  const placed = sessions.map((session, index) => {
+    const repo = session.cwd;
+    if (session.demo && index % 9 === 4 && session.branch) {
+      // A session that ran in a linked worktree of the same repository.
+      const tree = session.branch.split("/").pop() ?? "feature";
+      return { ...session, cwd: `${repo}/.claude/worktrees/${tree}`, projectRoot: repo };
+    }
+    if (session.project === "api-core" && index % 4 === 1) {
+      // A second, unrelated checkout that happens to share the folder name.
+      const other = "~/Clients/northwind/api-core";
+      return { ...session, cwd: other, projectRoot: other };
+    }
+    return { ...session, projectRoot: repo };
+  });
+  const rootsByLabel = new Map<string, Set<string>>();
+  for (const session of placed) {
+    const roots = rootsByLabel.get(session.projectLabel) ?? new Set<string>();
+    roots.add(session.projectRoot);
+    rootsByLabel.set(session.projectLabel, roots);
+  }
+  return placed.map((session) => {
+    const shared = (rootsByLabel.get(session.projectLabel)?.size ?? 0) > 1;
+    const parent = session.projectRoot.split("/").slice(-2, -1)[0];
+    return {
+      ...session,
+      projectRootLabel: shared && parent ? `${session.projectLabel} · ${parent}` : session.projectLabel,
+    };
+  });
+}
+
+export const DEMO_SESSIONS: SessionSummary[] = withProjectRoots([...FEATURED, ...filler].map(withUsageDays)).sort(
   (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
 );
 

@@ -135,6 +135,11 @@ interface AppContextValue {
   selectedSessionId: string | null;
   agentFocus: AgentId | "all";
   focusAgent: (agent: AgentId | "all") => void;
+  /** A `projectKey`, or "all". */
+  projectFocus: string;
+  setProjectFocus: (project: string) => void;
+  /** Opens Sessions filtered to one project (a `projectKey`). */
+  focusProject: (project: string) => void;
   openSession: (id: string) => void;
   detail: SessionDetail | null;
   detailLoading: boolean;
@@ -196,6 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastScanAt, setLastScanAt] = useState(new Date(Date.now() - 4 * 60_000).toISOString());
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [agentFocus, setAgentFocus] = useState<AgentId | "all">("all");
+  const [projectFocus, setProjectFocus] = useState("all");
   const [detailCache, setDetailCache] = useState<Record<string, SessionDetail>>({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(readSettings);
@@ -360,6 +366,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
               agent: summary.agent,
               path: summary.path,
             });
+            // The listing knows every project, so its labels are disambiguated.
+            next = {
+              ...next,
+              projectRoot: summary.projectRoot ?? next.projectRoot,
+              projectRootLabel: summary.projectRootLabel ?? next.projectRootLabel,
+            };
           }
         } else {
           next = demoSessionDetail(id);
@@ -395,6 +407,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const focusAgent = useCallback(
     (agent: AgentId | "all") => {
       setAgentFocus(agent);
+      navigate("sessions");
+    },
+    [navigate],
+  );
+
+  const focusProject = useCallback(
+    (project: string) => {
+      setAgentFocus("all");
+      setProjectFocus(project);
       navigate("sessions");
     },
     [navigate],
@@ -821,6 +842,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectedSessionId,
       agentFocus,
       focusAgent,
+      projectFocus,
+      setProjectFocus,
+      focusProject,
       openSession,
       detail: selectedSessionId ? detailCache[selectedSessionId] ?? null : null,
       detailLoading,
@@ -867,6 +891,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectedSessionId,
       agentFocus,
       focusAgent,
+      projectFocus,
+      setProjectFocus,
+      focusProject,
       openSession,
       detailCache,
       detailLoading,

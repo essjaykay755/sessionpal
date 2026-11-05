@@ -4,6 +4,7 @@ mod export;
 mod models;
 mod paths;
 mod pricing;
+mod projects;
 mod scan_cache;
 mod util;
 

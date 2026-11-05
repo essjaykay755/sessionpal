@@ -513,6 +513,8 @@ fn summarize(loaded: &Loaded, index: &Path, row: &Row, segments: &[Segment]) -> 
         excerpt: excerpt_text,
         project,
         project_label,
+        project_root: String::new(),
+        project_root_label: String::new(),
         cwd: display_path(Path::new(&cwd)),
         branch: None,
         created_at: created,

@@ -27,6 +27,7 @@ import {
 } from "@phosphor-icons/react";
 import { AGENT_CLASS, AGENTS, AGENT_ORDER, TINT_CLASS } from "../lib/agents";
 import { platform } from "../lib/native";
+import { canEstimateSessionCost, projectKey, projectName, usageTotals } from "../lib/analytics";
 import { usageTokens } from "../lib/pricing";
 import { parseBlocks } from "../lib/markdown";
 import { matchesSession, searchTokens, SESSION_SEARCH_PLACEHOLDER } from "../lib/search";
@@ -50,6 +51,7 @@ import {
   AgentBadge,
   Button,
   EmptyState,
+  EstimatedTag,
   IconButton,
   KebabMenu,
   SearchInput,
@@ -57,12 +59,13 @@ import {
   Tooltip,
 } from "../components/ui";
 
-type SortKey = "recent" | "oldest" | "tokens" | "size";
+type SortKey = "recent" | "oldest" | "tokens" | "cost" | "size";
 
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
   { value: "recent", label: "Most recent" },
   { value: "oldest", label: "Oldest first" },
   { value: "tokens", label: "Most tokens" },
+  { value: "cost", label: "Highest est. cost" },
   { value: "size", label: "Largest files" },
 ];
 
@@ -109,6 +112,8 @@ export default function SessionsPage() {
     loading,
     rescan,
     agentFocus,
+    projectFocus,
+    setProjectFocus,
     focusAgent,
     selectedSessionId,
     openSession,
@@ -125,7 +130,8 @@ export default function SessionsPage() {
 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
-  const [project, setProject] = useState("all");
+  const project = projectFocus;
+  const setProject = setProjectFocus;
   const [visible, setVisible] = useState(70);
   const [focusMode, setFocusMode] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
@@ -161,7 +167,7 @@ export default function SessionsPage() {
 
   const projects = useMemo(() => {
     const map = new Map<string, string>();
-    for (const session of sessions) map.set(session.project, session.projectLabel);
+    for (const session of sessions) map.set(projectKey(session), projectName(session));
     return Array.from(map.entries())
       .map(([slug, label]) => ({ slug, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -179,7 +185,7 @@ export default function SessionsPage() {
     const tokens = searchTokens(query);
     const matches = sessions.filter((session) => {
       if (activeAgent !== "all" && session.agent !== activeAgent) return false;
-      if (project !== "all" && session.project !== project) return false;
+      if (project !== "all" && projectKey(session) !== project) return false;
       return matchesSession(session, tokens);
     });
     return matches.sort((a, b) => {
@@ -188,6 +194,9 @@ export default function SessionsPage() {
           return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
         case "tokens":
           return b.tokens - a.tokens;
+        case "cost":
+          // Unpriced sessions sort after every priced one.
+          return sessionCost(b) - sessionCost(a) || b.tokens - a.tokens;
         case "size":
           return b.sizeBytes - a.sizeBytes;
         default:
@@ -203,6 +212,18 @@ export default function SessionsPage() {
   const activeDetail = detail && detail.id === selectedSessionId ? detail : null;
   const busy = selectedSessionId !== null && !activeDetail && detailLoading;
   const visibleSessions = filtered.slice(0, visible);
+  const projectTotals = useMemo(
+    () => (project === "all" ? null : usageTotals(filtered)),
+    [project, filtered],
+  );
+  const sortOptions = settings.showCosts
+    ? SORT_OPTIONS
+    : SORT_OPTIONS.filter((option) => option.value !== "cost");
+  const showRowCost = sort === "cost" && settings.showCosts;
+
+  useEffect(() => {
+    if (!settings.showCosts && sort === "cost") setSort("tokens");
+  }, [settings.showCosts, sort]);
   const filterActive = activeAgent !== "all" || project !== "all" || query.trim().length > 0;
 
   const clearFilters = () => {
@@ -352,7 +373,7 @@ export default function SessionsPage() {
                   aria-label="Sort sessions"
                   className="h-8 w-full cursor-pointer appearance-none rounded-[10px] border border-line/[0.08] bg-panel pl-3 pr-7 text-12 font-medium text-fg outline-none transition-colors hover:bg-sunken/50"
                 >
-                  {SORT_OPTIONS.map((option) => (
+                  {sortOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -378,6 +399,36 @@ export default function SessionsPage() {
                 </button>
               )}
             </div>
+
+            {projectTotals && (
+              <div className="rounded-[12px] border border-line/[0.07] bg-sunken/40 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2 text-11 text-faint">
+                  <span className="truncate font-medium text-muted">
+                    {projects.find((item) => item.slug === project)?.label ?? "Project"} · all time
+                  </span>
+                  <EstimatedTag className="px-1.5 py-0" />
+                </div>
+                <div className="mt-1.5 grid grid-cols-3 gap-2">
+                  <ProjectFigure label="Sessions" value={number(projectTotals.sessions)} />
+                  <ProjectFigure label="Tokens" value={compact(projectTotals.tokens)} />
+                  <ProjectFigure
+                    label="Est. cost"
+                    value={
+                      !settings.showCosts
+                        ? "Hidden"
+                        : projectTotals.pricedSessions === 0
+                          ? "—"
+                          : `${money(projectTotals.cost)}${projectTotals.pricedSessions < projectTotals.sessionsWithUsage ? "*" : ""}`
+                    }
+                    title={
+                      projectTotals.pricedSessions < projectTotals.sessionsWithUsage
+                        ? `${projectTotals.pricedSessions} of ${projectTotals.sessionsWithUsage} sessions priced`
+                        : undefined
+                    }
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -417,9 +468,15 @@ export default function SessionsPage() {
                       </span>
                     </span>
                     <span className="mt-1 flex min-w-0 items-center gap-1.5 text-12 text-muted">
-                      <span className="truncate">{session.projectLabel}</span>
+                      <span className="truncate">{projectName(session)}</span>
                       <span className="ml-auto shrink-0 tabular text-faint">
-                        {session.usage ? compact(session.tokens) : "—"}
+                        {!session.usage
+                          ? "—"
+                          : showRowCost
+                            ? canEstimateSessionCost(session)
+                              ? money(session.usage.cost ?? 0)
+                              : "Unpriced"
+                            : compact(session.tokens)}
                       </span>
                     </span>
                     {sessionTitle(session) === `${AGENTS[session.agent].shortName} session` && session.excerpt && !/^(?:[<{]|the following is the codex agent history)/i.test(session.excerpt.trim()) && (
@@ -1325,6 +1382,19 @@ function DetailSkeleton({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function sessionCost(session: SessionSummary): number {
+  return canEstimateSessionCost(session) ? session.usage?.cost ?? 0 : -1;
+}
+
+function ProjectFigure({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="min-w-0" title={title}>
+      <div className="truncate text-14 font-bold tabular tracking-[-0.03em] text-fg">{value}</div>
+      <div className="text-11 text-faint">{label}</div>
     </div>
   );
 }

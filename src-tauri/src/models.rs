@@ -110,6 +110,14 @@ pub struct SessionSummary {
     pub excerpt: String,
     pub project: String,
     pub project_label: String,
+    /// The repository (or folder) the session's usage is attributed to, as a
+    /// display path. Empty when the session has no working directory.
+    #[serde(default)]
+    pub project_root: String,
+    /// Label for `project_root`, with the parent folder appended when two
+    /// different roots would otherwise share a name.
+    #[serde(default)]
+    pub project_root_label: String,
     pub cwd: String,
     pub branch: Option<String>,
     pub created_at: String,

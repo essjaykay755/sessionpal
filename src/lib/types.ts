@@ -69,6 +69,14 @@ export interface SessionSummary {
   excerpt: string;
   project: string;
   projectLabel: string;
+  /**
+   * The repository (or folder) usage is attributed to: the enclosing git
+   * repository, with linked worktrees mapped to their main checkout. Empty or
+   * missing when the session has no working directory.
+   */
+  projectRoot?: string;
+  /** Label for `projectRoot`, disambiguated when two roots share a name. */
+  projectRootLabel?: string;
   cwd: string;
   branch: string | null;
   createdAt: string;

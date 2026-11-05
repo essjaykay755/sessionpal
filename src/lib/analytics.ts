@@ -395,29 +395,94 @@ export function sessionUsageParts(sessions: SessionSummary[], window?: DayWindow
   ];
 }
 
-export function projectStats(sessions: SessionSummary[]): Array<{
-  slug: string;
+/** Sessions in the same repository share a key, whatever folder they ran in. */
+export function projectKey(session: SessionSummary): string {
+  return session.projectRoot ? `root:${session.projectRoot}` : `slug:${session.project}`;
+}
+
+export function projectName(session: SessionSummary): string {
+  return session.projectRootLabel || session.projectLabel;
+}
+
+export interface ProjectCostStat {
+  key: string;
   label: string;
+  /** Display path of the repository, or empty when unknown. */
+  path: string;
+  tint: SessionSummary["tint"];
+  icon: string;
   sessions: number;
-  storage: number;
+  sessionsWithUsage: number;
+  pricedSessions: number;
   tokens: number;
-}> {
-  const map = new Map<string, { slug: string; label: string; sessions: number; storage: number; tokens: number }>();
+  cost: number;
+  /** False when some of the project's usage could not be priced. */
+  costComplete: boolean;
+  cacheSavings: number;
+  agents: AgentId[];
+  models: string[];
+  lastActive: string;
+  /** Share of all tokens in the set. */
+  tokenShare: number;
+  /** Share of all estimated cost in the set. */
+  costShare: number;
+  members: SessionSummary[];
+}
+
+/**
+ * Usage and estimated cost per project. With a window, only usage inside it
+ * counts, so totals match the page-level figures for the same period.
+ */
+export function projectCostStats(sessions: SessionSummary[], window?: DayWindow): ProjectCostStat[] {
+  const groups = new Map<string, SessionSummary[]>();
   for (const session of sessions) {
-    const current = map.get(session.project);
-    if (current) {
-      current.sessions += 1;
-      current.storage += session.sizeBytes;
-      current.tokens += session.tokens;
-    } else {
-      map.set(session.project, {
-        slug: session.project,
-        label: session.projectLabel,
-        sessions: 1,
-        storage: session.sizeBytes,
-        tokens: session.tokens,
-      });
-    }
+    const key = projectKey(session);
+    const group = groups.get(key);
+    if (group) group.push(session);
+    else groups.set(key, [session]);
   }
-  return Array.from(map.values()).sort((a, b) => b.sessions - a.sessions);
+  const stats: ProjectCostStat[] = [];
+  for (const [key, members] of groups) {
+    const totals = usageTotals(members, window);
+    const first = members[0];
+    const agents = AGENT_ORDER.filter((agent) => members.some((session) => session.agent === agent));
+    const modelTokens = new Map<string, number>();
+    for (const session of members) {
+      if (!session.model) continue;
+      const label = new Set(session.models.filter(Boolean)).size > 1 ? "Multiple models" : modelInfo(session.model).label;
+      modelTokens.set(label, (modelTokens.get(label) ?? 0) + usageTokens(usageInWindow(session, window)));
+    }
+    stats.push({
+      key,
+      label: projectName(first),
+      path: first.projectRoot ?? "",
+      tint: first.tint,
+      icon: first.icon,
+      sessions: totals.sessions,
+      sessionsWithUsage: totals.sessionsWithUsage,
+      pricedSessions: totals.pricedSessions,
+      tokens: totals.tokens,
+      cost: totals.cost,
+      costComplete: totals.pricedSessions === totals.sessionsWithUsage,
+      cacheSavings: totals.cacheSavings,
+      agents,
+      models: Array.from(modelTokens.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([label]) => label),
+      lastActive: members.reduce(
+        (latest, session) => (session.updatedAt > latest ? session.updatedAt : latest),
+        first.updatedAt,
+      ),
+      tokenShare: 0,
+      costShare: 0,
+      members,
+    });
+  }
+  const tokenTotal = stats.reduce((sum, stat) => sum + stat.tokens, 0);
+  const costTotal = stats.reduce((sum, stat) => sum + stat.cost, 0);
+  for (const stat of stats) {
+    stat.tokenShare = tokenTotal ? (stat.tokens / tokenTotal) * 100 : 0;
+    stat.costShare = costTotal ? (stat.cost / costTotal) * 100 : 0;
+  }
+  return stats.sort((a, b) => b.cost - a.cost || b.tokens - a.tokens);
 }

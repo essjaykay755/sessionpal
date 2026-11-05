@@ -288,6 +288,8 @@ fn summarize(connection: &Connection, db: &Path, row: &SessionRow) -> SessionSum
         excerpt: excerpt_text,
         project,
         project_label,
+        project_root: String::new(),
+        project_root_label: String::new(),
         cwd: display_path(Path::new(&cwd)),
         branch: None,
         created_at: created,

@@ -333,6 +333,8 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
             excerpt: excerpt_text,
             project,
             project_label,
+            project_root: String::new(),
+            project_root_label: String::new(),
             cwd: crate::util::display_path(Path::new(&cwd)),
             branch: builder.branch,
             created_at,
