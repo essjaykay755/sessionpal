@@ -2,7 +2,7 @@
 
 A calm, local-first library for the AI coding sessions already on your machine.
 
-Website: [sessionpal.app](https://sessionpal.app) · Made by [Subhojit Karmakar](https://essjaykay.dev)
+Website: [sessionpal.app](https://sessionpal.app) · Source: [GitHub](https://github.com/essjaykay755/sessionpal) · Made by [Subhojit Karmakar](https://essjaykay.dev)
 
 SessionPal discovers, browses, exports, backs up and cleans up conversations from
 **Claude Code**, **Codex**, **Cursor**, **OpenCode** and **Google Antigravity**. It runs entirely on your

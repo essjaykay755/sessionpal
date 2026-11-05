@@ -12,6 +12,7 @@ export const APP_INFO = {
   developer: "Subhojit Karmakar",
   developerUrl: "https://essjaykay.dev",
   websiteUrl: "https://sessionpal.app",
+  repositoryUrl: "https://github.com/essjaykay755/sessionpal",
   license: "MIT",
   copyrightYear: 2026,
 } as const;

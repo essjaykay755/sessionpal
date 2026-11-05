@@ -11,6 +11,7 @@ import {
   FileText,
   FolderLock,
   FolderOpen,
+  GithubLogo,
   HardDrives,
   Info,
   LockSimple,
@@ -674,17 +675,20 @@ function AboutSection({
 }) {
   const [latest, ...older] = RELEASES;
   const links = [
-    { label: "SessionPal website", url: APP_INFO.websiteUrl },
-    { label: `${APP_INFO.developer}'s website`, url: APP_INFO.developerUrl },
+    { label: "SessionPal website", url: APP_INFO.websiteUrl, icon: null },
+    {
+      label: "Source on GitHub",
+      url: APP_INFO.repositoryUrl,
+      icon: <GithubLogo className="h-3.5 w-3.5 text-faint" />,
+    },
+    { label: `${APP_INFO.developer}'s website`, url: APP_INFO.developerUrl, icon: null },
   ].filter((link) => link.url);
 
   return (
     <section id="about" className="card mt-3.5 scroll-mt-4 overflow-hidden">
       <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="flex flex-col items-center border-b border-line/[0.06] px-6 py-7 text-center lg:border-b-0 lg:border-r">
-          <span className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#f3e8cd] text-[#1b1712] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_6px_16px_-6px_rgba(40,30,20,0.35)]">
-            <BrandMark className="h-9 w-9" />
-          </span>
+          <BrandMark className="h-12 w-12 text-fg" />
           <h2 className="mt-3.5 text-18 font-bold tracking-[-0.03em] text-fg">{APP_INFO.name}</h2>
           <div className="mt-0.5 text-12 tabular text-muted">Version {APP_INFO.version}</div>
           <p className="mt-2.5 max-w-[230px] text-12 leading-relaxed text-muted">{APP_INFO.tagline}</p>
@@ -705,7 +709,10 @@ function AboutSection({
                   className="w-full justify-between"
                   onClick={() => void openUrl(link.url)}
                 >
-                  {link.label}
+                  <span className="flex items-center gap-1.5">
+                    {link.icon}
+                    {link.label}
+                  </span>
                   <ArrowSquareOut className="h-3.5 w-3.5 text-faint" />
                 </Button>
               ))}

@@ -1,12 +1,16 @@
 {
   "name": "sessionpal",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "A local-first desktop library for AI coding agent sessions.",
   "license": "MIT",
   "author": "Subhojit Karmakar (https://essjaykay.dev)",
   "homepage": "https://sessionpal.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/essjaykay755/sessionpal.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

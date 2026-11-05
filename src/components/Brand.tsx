@@ -13,7 +13,9 @@ export function BrandMark({ className, ...props }: SVGProps<SVGSVGElement>) {
       viewBox="0 0 48 36"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={cn("h-6 w-6", className)}
+      // The default size applies only when the caller sets none: `cn` does not
+      // resolve conflicting utilities, so both sizes would otherwise compete.
+      className={cn(!/(^|\s)h-/.test(className ?? "") && "h-6 w-6", className)}
       aria-hidden="true"
       {...props}
     >
