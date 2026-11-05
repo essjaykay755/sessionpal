@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Archive,
-  ArrowClockwise,
+  ArrowsClockwise,
   ArrowRight,
   ChartLineUp,
   ChatCircleDots,
@@ -99,7 +99,7 @@ export function CommandPalette() {
         group: "Actions",
         label: "Rescan agent storage",
         detail: demo ? "Refresh sample library" : "Look for new local sessions",
-        icon: <ArrowClockwise className="h-4 w-4" />,
+        icon: <ArrowsClockwise className="h-4 w-4" />,
         keywords: "refresh scan discover sync",
         run: () => void rescan(),
       },
@@ -257,7 +257,7 @@ export function CommandPalette() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
             onClick={close}
-            className="absolute inset-0 bg-[#16120d]/45 backdrop-blur-[6px] dark:bg-[#050403]/70"
+            className="absolute inset-0 bg-[#16120d]/45 backdrop-blur-[6px] dark:bg-black/60"
           />
           <motion.div
             initial={{ opacity: 0 }}

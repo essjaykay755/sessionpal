@@ -23,26 +23,57 @@
     --copper: #b8693f;
     --copper-deep: #965132;
 
+    /* Status colours. `x` is text and icons, `x-solid` fills a control,
+       `x-soft` is a tinted background and `x-ink` is text placed on it. */
+    --danger: 168 68 52;
+    --danger-solid: 168 68 52;
+    --danger-soft: 242 219 213;
+    --danger-ink: 132 63 48;
+    --success: 113 133 90;
+    --success-solid: 127 150 100;
+    --success-soft: 227 236 219;
+    --success-ink: 74 98 58;
+    --warning: 140 106 42;
+    --warning-solid: 186 142 67;
+    --warning-soft: 244 232 201;
+    --warning-ink: 124 100 40;
+
     color-scheme: light;
   }
 
+  /* Dark is a near-neutral graphite with only a trace of warmth, so the copper
+     accent and agent colours carry the character instead of every surface
+     being brown. Each layer steps up in lightness: rail < canvas < panel < raised. */
   .dark {
-    --canvas: 23 21 18;
-    --panel: 29 26 22;
-    --raised: 35 31 26;
-    --sunken: 19 17 15;
-    --fg: 242 236 226;
-    --muted: 174 164 150;
-    --faint: 128 119 108;
+    --canvas: 22 21 20;
+    --panel: 30 29 27;
+    --raised: 39 38 35;
+    --sunken: 17 16 15;
+    --fg: 238 234 227;
+    --muted: 168 162 153;
+    --faint: 130 125 117;
     --line: 255 255 255;
 
-    --rail: #141210;
-    --rail-elevated: #24201b;
-    --rail-line: rgba(255, 255, 255, 0.07);
+    --rail: #100f0e;
+    --rail-elevated: #1f1e1c;
+    --rail-line: rgba(255, 255, 255, 0.06);
 
-    --stage: #0e0d0b;
-    --copper: #cb825a;
-    --copper-deep: #dfa17d;
+    --stage: #0a0a09;
+    --copper: #d08a62;
+    --copper-deep: #e3a782;
+
+    --danger: 232 150 130;
+    --danger-solid: 184 84 66;
+    --danger-soft: 58 35 31;
+    --danger-ink: 241 182 166;
+    --success: 166 190 140;
+    --success-solid: 147 172 122;
+    --success-soft: 35 46 31;
+    --success-ink: 196 216 176;
+    --warning: 218 190 128;
+    --warning-solid: 196 160 90;
+    --warning-soft: 52 44 27;
+    --warning-ink: 232 210 158;
 
     color-scheme: dark;
   }
@@ -68,7 +99,7 @@
   }
 
   ::selection {
-    background: rgb(184 105 63 / 0.22);
+    background: color-mix(in srgb, var(--copper) 28%, transparent);
     color: rgb(var(--fg));
   }
 
@@ -129,11 +160,11 @@
     --tint-line: #e4c3b3;
   }
   .dark .tint-peach {
-    --tint-bg: #302824;
-    --tint-deep: #3e2d24;
     --tint-ink: #efc4ad;
     --tint-faint: #d29272;
-    --tint-line: #51392d;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .tint-sage {
@@ -144,11 +175,11 @@
     --tint-line: #c7d4ba;
   }
   .dark .tint-sage {
-    --tint-bg: #272e27;
-    --tint-deep: #2e3727;
     --tint-ink: #cddbbd;
     --tint-faint: #91a77d;
-    --tint-line: #3c4932;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .tint-lilac {
@@ -159,11 +190,11 @@
     --tint-line: #d6c9e5;
   }
   .dark .tint-lilac {
-    --tint-bg: #2c2933;
-    --tint-deep: #332b41;
     --tint-ink: #d8c9ee;
     --tint-faint: #a48fbf;
-    --tint-line: #443a56;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .tint-butter {
@@ -174,11 +205,11 @@
     --tint-line: #e6d3a8;
   }
   .dark .tint-butter {
-    --tint-bg: #302d24;
-    --tint-deep: #3b3321;
     --tint-ink: #eddfb0;
     --tint-faint: #b7a267;
-    --tint-line: #4c422a;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .tint-sky {
@@ -189,11 +220,11 @@
     --tint-line: #c5d9df;
   }
   .dark .tint-sky {
-    --tint-bg: #252f32;
-    --tint-deep: #263438;
     --tint-ink: #c3dce1;
     --tint-faint: #82a4ab;
-    --tint-line: #34474b;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .tint-rose {
@@ -204,11 +235,11 @@
     --tint-line: #e6c7ce;
   }
   .dark .tint-rose {
-    --tint-bg: #30282a;
-    --tint-deep: #3c2b31;
     --tint-ink: #e8c5ce;
     --tint-faint: #bd8795;
-    --tint-line: #4b363d;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .tint-stone {
@@ -219,11 +250,11 @@
     --tint-line: #ddd3c4;
   }
   .dark .tint-stone {
-    --tint-bg: #2d2925;
-    --tint-deep: #322d26;
     --tint-ink: #ddd0c0;
     --tint-faint: #a1917d;
-    --tint-line: #403a31;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .tint-blue {
@@ -234,11 +265,11 @@
     --tint-line: #c8d7e6;
   }
   .dark .tint-blue {
-    --tint-bg: #262d34;
-    --tint-deep: #26313e;
     --tint-ink: #c3d4e7;
     --tint-faint: #87a0bb;
-    --tint-line: #333f4e;
+    --tint-bg: color-mix(in srgb, var(--tint-faint) 13%, rgb(var(--panel)));
+    --tint-deep: color-mix(in srgb, var(--tint-faint) 20%, rgb(var(--panel)));
+    --tint-line: color-mix(in srgb, var(--tint-faint) 30%, rgb(var(--panel)));
   }
 
   .agent-claude {
@@ -249,9 +280,9 @@
   }
   .dark .agent-claude {
     --agent: #dd9a75;
-    --agent-soft: #33241d;
+    --agent-soft: color-mix(in srgb, var(--agent) 15%, rgb(var(--panel)));
     --agent-ink: #f0c6af;
-    --agent-deep: #3c2b22;
+    --agent-deep: color-mix(in srgb, var(--agent) 24%, rgb(var(--panel)));
   }
 
   .agent-codex {
@@ -262,9 +293,9 @@
   }
   .dark .agent-codex {
     --agent: #a6bb8c;
-    --agent-soft: #262b20;
+    --agent-soft: color-mix(in srgb, var(--agent) 15%, rgb(var(--panel)));
     --agent-ink: #d0dcbf;
-    --agent-deep: #2f3628;
+    --agent-deep: color-mix(in srgb, var(--agent) 24%, rgb(var(--panel)));
   }
 
   .agent-cursor {
@@ -275,9 +306,9 @@
   }
   .dark .agent-cursor {
     --agent: #a3b4c2;
-    --agent-soft: #22272b;
+    --agent-soft: color-mix(in srgb, var(--agent) 15%, rgb(var(--panel)));
     --agent-ink: #cdd7df;
-    --agent-deep: #2b3237;
+    --agent-deep: color-mix(in srgb, var(--agent) 24%, rgb(var(--panel)));
   }
 
   .agent-opencode {
@@ -288,9 +319,9 @@
   }
   .dark .agent-opencode {
     --agent: #cfb66f;
-    --agent-soft: #2b2618;
+    --agent-soft: color-mix(in srgb, var(--agent) 15%, rgb(var(--panel)));
     --agent-ink: #eadbac;
-    --agent-deep: #352e1e;
+    --agent-deep: color-mix(in srgb, var(--agent) 24%, rgb(var(--panel)));
   }
 
   .agent-antigravity {
@@ -301,13 +332,18 @@
   }
   .dark .agent-antigravity {
     --agent: #b0a8e0;
-    --agent-soft: #25233a;
+    --agent-soft: color-mix(in srgb, var(--agent) 15%, rgb(var(--panel)));
     --agent-ink: #d9d4f2;
-    --agent-deep: #2e2b47;
+    --agent-deep: color-mix(in srgb, var(--agent) 24%, rgb(var(--panel)));
   }
 
   .card {
     @apply rounded-[24px] border border-line/[0.07] bg-panel;
+  }
+  /* A faint top highlight gives dark cards an edge without a heavy border. */
+  .dark .card {
+    border-color: rgb(255 255 255 / 0.065);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
   }
 
   .hairline {
@@ -363,8 +399,7 @@
 
 .dark .app-stage {
   background:
-    radial-gradient(1000px 600px at 10% -10%, rgba(203, 130, 90, 0.08), transparent 60%),
-    radial-gradient(800px 600px at 100% 110%, rgba(89, 111, 119, 0.1), transparent 55%),
+    radial-gradient(1000px 600px at 10% -10%, rgba(255, 255, 255, 0.035), transparent 60%),
     var(--stage);
 }
 
@@ -471,7 +506,7 @@
 }
 
 .dark .prose-den pre {
-  background: #131210;
+  background: rgb(var(--sunken));
 }
 
 .prose-den ul {
@@ -525,7 +560,7 @@
 }
 
 .dark .tooltip-bubble {
-  background: #2b2620;
+  background: #2e2d2a;
   color: #f1e9dd;
   border-color: rgba(255, 255, 255, 0.08);
 }

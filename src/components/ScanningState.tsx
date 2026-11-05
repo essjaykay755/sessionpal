@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { ArrowClockwise, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
+import { ArrowsClockwise, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
 import { AGENTS, AGENT_CLASS, AGENT_ORDER } from "../lib/agents";
 import { cn } from "../lib/utils";
 import { AgentMark, BrandMark } from "./Brand";
@@ -21,7 +21,7 @@ export function ScanningState() {
           subtitle="Reading your library…"
           actions={
             <span className="flex items-center gap-2 rounded-full border border-line/[0.08] px-3 py-1.5 text-11 text-muted">
-              <ArrowClockwise className="h-3.5 w-3.5 animate-spin text-copper-500 motion-reduce:animate-none" />
+              <ArrowsClockwise className="h-3.5 w-3.5 animate-spin text-copper-500 motion-reduce:animate-none" />
               Read-only scan · nothing leaves this device
             </span>
           }
@@ -97,7 +97,7 @@ export function ScanFailedState({ error, onRetry }: { error: string; onRetry: ()
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto px-5 py-10 sm:px-8">
       <div className="w-full max-w-[470px] text-center" role="alert">
-        <span className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-[20px] bg-[#b3543f]/10 text-[#944632] dark:text-[#e5a797]">
+        <span className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-[20px] bg-danger/10 text-danger">
           <WarningCircle className="h-8 w-8" />
         </span>
         <h1 className="mt-7 text-32 font-black leading-[1.05] tracking-[-0.05em] text-fg">
@@ -112,7 +112,7 @@ export function ScanFailedState({ error, onRetry }: { error: string; onRetry: ()
           </pre>
         )}
         <div className="mt-6 flex justify-center">
-          <Button variant="copper" size="sm" icon={<ArrowClockwise className="h-3.5 w-3.5" />} onClick={onRetry}>
+          <Button variant="copper" size="sm" icon={<ArrowsClockwise className="h-3.5 w-3.5" />} onClick={onRetry}>
             Try again
           </Button>
         </div>

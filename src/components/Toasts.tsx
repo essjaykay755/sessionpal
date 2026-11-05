@@ -48,9 +48,9 @@ export function Toasts() {
                   className={cn(
                     "mt-0.5 shrink-0",
                     toast.tone === "success"
-                      ? "text-[#6e8b53] dark:text-[#a7c58b]"
+                      ? "text-success"
                       : toast.tone === "danger"
-                        ? "text-[#b3543f] dark:text-[#e19b8c]"
+                        ? "text-danger"
                         : "text-copper-500 dark:text-copper-300",
                   )}
                 >

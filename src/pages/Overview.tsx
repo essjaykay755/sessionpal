@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
-  ArrowClockwise,
+  ArrowsClockwise,
   ArrowRight,
   ArrowUpRight,
   ChartLineUp,
@@ -158,7 +158,7 @@ export default function OverviewPage() {
             title="No sessions found yet"
             description="SessionPal looked in the standard Claude Code, Codex, Cursor, OpenCode and Antigravity locations but found nothing. Start a session, then scan again."
             action={
-              <Button variant="copper" icon={<ArrowClockwise className="h-4 w-4" />} onClick={() => void rescan()}>
+              <Button variant="copper" icon={<ArrowsClockwise className="h-4 w-4" />} onClick={() => void rescan()}>
                 Scan local storage
               </Button>
             }
@@ -177,7 +177,7 @@ export default function OverviewPage() {
           <Button
             variant="secondary"
             size="sm"
-            icon={<ArrowClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
+            icon={<ArrowsClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
             onClick={() => void rescan()}
           >
             Rescan
@@ -456,7 +456,7 @@ export default function OverviewPage() {
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line/[0.06]">
               <span
-                className="block h-full rounded-full bg-[#81976a]"
+                className="block h-full rounded-full bg-success-solid"
                 style={{
                   width: `${sessions.length && latestBackup ? Math.min(100, (latestBackup.sessionCount / sessions.length) * 100) : 0}%`,
                 }}
@@ -477,7 +477,7 @@ export default function OverviewPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-14 font-bold tracking-[-0.025em]">Recent activity</h2>
               <span className="flex items-center gap-1.5 text-11 text-faint">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#7f9664]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-success-solid" />
                 On device
               </span>
             </div>
@@ -491,7 +491,7 @@ export default function OverviewPage() {
                   ) : event.kind === "delete" ? (
                     <Trash className="h-3.5 w-3.5" />
                   ) : event.kind === "scan" ? (
-                    <ArrowClockwise className="h-3.5 w-3.5" />
+                    <ArrowsClockwise className="h-3.5 w-3.5" />
                   ) : (
                     <ChatCircleDots className="h-3.5 w-3.5" />
                   );

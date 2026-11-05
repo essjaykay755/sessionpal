@@ -160,7 +160,7 @@ const buttonVariants: Record<ButtonVariant, string> = {
     "bg-panel text-fg border border-line/[0.1] hover:bg-sunken/70 shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] dark:shadow-none",
   ghost: "text-muted hover:text-fg hover:bg-line/[0.05]",
   soft: "bg-line/[0.055] text-fg hover:bg-line/[0.09]",
-  danger: "bg-[#a84434] text-white hover:bg-[#933a2c] dark:bg-[#b75343] dark:hover:bg-[#c1604f]",
+  danger: "bg-danger-solid text-white hover:bg-danger-solid/90",
 };
 
 const buttonSizes: Record<ButtonSize, string> = {
@@ -260,9 +260,9 @@ type BadgeTone = "neutral" | "copper" | "success" | "warning" | "danger" | "outl
 const badgeTones: Record<BadgeTone, string> = {
   neutral: "bg-line/[0.055] text-muted",
   copper: "bg-copper-100/70 text-copper-700 dark:bg-copper-500/15 dark:text-copper-300",
-  success: "bg-[#e3ecdb] text-[#4a623a] dark:bg-[#293522] dark:text-[#b8cfa5]",
-  warning: "bg-[#f4e8c9] text-[#7c6428] dark:bg-[#352d1c] dark:text-[#dbc486]",
-  danger: "bg-[#f2dbd5] text-[#843f30] dark:bg-[#39251f] dark:text-[#e4a696]",
+  success: "bg-success-soft text-success-ink",
+  warning: "bg-warning-soft text-warning-ink",
+  danger: "bg-danger-soft text-danger-ink",
   outline: "border border-line/[0.1] text-muted",
 };
 
@@ -475,7 +475,7 @@ export function Segmented<T extends string>({
               <motion.span
                 layoutId={`segment-${id}`}
                 transition={{ type: "spring", stiffness: 480, damping: 36 }}
-                className="absolute inset-0 rounded-full bg-raised shadow-[0_1px_3px_rgba(25,18,10,0.1)] dark:bg-[#3b342c]"
+                className="absolute inset-0 rounded-full bg-raised shadow-[0_1px_3px_rgba(25,18,10,0.1)] dark:bg-white/[0.1]"
               />
             )}
             <span className="relative z-10 flex items-center justify-center gap-1.5">
@@ -549,7 +549,7 @@ export function Modal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
-            className="absolute inset-0 bg-[#14110d]/45 backdrop-blur-[4px] dark:bg-[#070605]/65"
+            className="absolute inset-0 bg-[#14110d]/45 backdrop-blur-[4px] dark:bg-black/60"
             onClick={() => dismissible && onClose()}
           />
           <motion.div
@@ -711,7 +711,7 @@ function MenuPopover({
               className={cn(
                 "flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-12 font-medium transition-colors disabled:opacity-40",
                 item.danger
-                  ? "text-[#a84434] hover:bg-[#a84434]/[0.07] dark:text-[#e19b8c]"
+                  ? "text-danger hover:bg-danger/[0.08]"
                   : "text-fg/85 hover:bg-line/[0.055] hover:text-fg",
               )}
             >

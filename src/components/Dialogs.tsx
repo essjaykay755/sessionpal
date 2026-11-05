@@ -18,7 +18,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { AGENTS, AGENT_CLASS, AGENT_ORDER, agentList, backupCoverage } from "../lib/agents";
-import { MODELS } from "../lib/pricing";
+import { MODELS, type ModelInfo } from "../lib/pricing";
 import { useApp } from "../lib/store";
 import type { AgentId, BackupRecord, ExportFormat, SessionSummary } from "../lib/types";
 import { bytes, cn, compact, filenameStamp, fullDate, money, number, relativeTime } from "../lib/utils";
@@ -236,7 +236,7 @@ function CreateBackupDialog({ open, onClose }: { open: boolean; onClose: () => v
             {agents.length ? (
               agents.map((agent) => <AgentBadge key={agent} agent={agent} compact />)
             ) : (
-              <span className="text-11 text-[#8c6a2a] dark:text-[#d2b97d]">
+              <span className="text-11 text-warning">
                 Choose at least one agent to continue.
               </span>
             )}
@@ -254,7 +254,7 @@ function CreateBackupDialog({ open, onClose }: { open: boolean; onClose: () => v
           </InfoNote>
         )}
         {error && (
-          <InfoNote className="border-[#b3543f]/20 text-[#944632] dark:text-[#e5a797]" icon={<WarningCircle className="h-3.5 w-3.5" />}>
+          <InfoNote className="border-danger/20 text-danger" icon={<WarningCircle className="h-3.5 w-3.5" />}>
             {error}
           </InfoNote>
         )}
@@ -512,7 +512,7 @@ function DeleteSessionsDialog({
               className={cn(
                 "flex h-[18px] w-[18px] items-center justify-center rounded-[6px] border transition-colors",
                 acknowledged
-                  ? "border-[#a84434] bg-[#a84434] text-white dark:border-[#c66453] dark:bg-[#b75343]"
+                  ? "border-danger-solid bg-danger-solid text-white"
                   : "border-line/20 bg-panel",
               )}
             >
@@ -526,7 +526,7 @@ function DeleteSessionsDialog({
         </label>
 
         {error && (
-          <InfoNote className="border-[#b3543f]/20 text-[#944632] dark:text-[#e5a797]" icon={<WarningCircle className="h-3.5 w-3.5" />}>
+          <InfoNote className="border-danger/20 text-danger" icon={<WarningCircle className="h-3.5 w-3.5" />}>
             {error}
           </InfoNote>
         )}
@@ -646,7 +646,7 @@ function RestoreBackupDialog({
           </InfoNote>
 
           {error && (
-            <InfoNote className="border-[#b3543f]/20 text-[#944632] dark:text-[#e5a797]" icon={<WarningCircle className="h-3.5 w-3.5" />}>
+            <InfoNote className="border-danger/20 text-danger" icon={<WarningCircle className="h-3.5 w-3.5" />}>
               {error}
             </InfoNote>
           )}
@@ -735,7 +735,7 @@ function BackupDetailsDialog({
             variant="ghost"
             size="sm"
             icon={<Trash className="h-3.5 w-3.5" />}
-            className="mr-auto text-[#a84434] hover:bg-[#a84434]/[0.06] dark:text-[#e19b8c]"
+            className="mr-auto text-danger hover:bg-danger/[0.08]"
             onClick={() => backup && openDialog({ kind: "delete-backup", id: backup.id })}
           >
             Delete
@@ -909,7 +909,13 @@ function DeleteBackupDialog({
 
 function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { settings, updateSettings } = useApp();
-  const models = Object.values(MODELS);
+  // Group by provider so the list reads as a reference table, not a wall of rows.
+  const families = Object.entries(
+    Object.values(MODELS).reduce<Record<string, ModelInfo[]>>((groups, model) => {
+      (groups[model.family] ??= []).push(model);
+      return groups;
+    }, {}),
+  );
 
   return (
     <Modal
@@ -935,71 +941,103 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
       }
     >
       <div className="space-y-5">
-        <div className="rounded-[16px] border border-line/[0.075] bg-sunken/40 p-4">
-          <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-copper-500/12 text-copper-600 dark:text-copper-300">
+        <div className="flex items-start gap-3 rounded-[16px] border border-line/[0.075] bg-sunken/40 p-4">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-copper-500/[0.12] text-copper-600 dark:text-copper-300">
+            <Info className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-13 font-semibold text-fg">API-equivalent value, not a bill</span>
               <EstimatedTag />
-            </span>
-            <div>
-              <div className="text-12 font-semibold text-fg">API-equivalent value, not a bill</div>
-              <p className="mt-1 text-11 leading-relaxed text-muted">
-                Estimates use standard short-context API rates. Subscription usage, discounts,
-                long-context rates, and other adjustments are not included. Cache writes use the
-                shortest standard duration. These figures are not a bill.
-              </p>
             </div>
+            <p className="mt-1 text-12 leading-relaxed text-muted">
+              Estimates use standard short-context API rates. Subscription usage, discounts,
+              long-context rates and other adjustments are not included, and cache writes use the
+              shortest standard duration.
+            </p>
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-[16px] border border-line/[0.075]">
-          <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,64px)] gap-2 border-b border-line/[0.065] bg-sunken/40 px-3.5 py-2 text-11 font-medium text-faint sm:grid-cols-[minmax(0,1fr)_repeat(4,76px)]">
-            <span>Model</span>
-            <span className="text-right">Input</span>
-            <span className="text-right">Output</span>
-            <span className="text-right">Cache read</span>
-            <span className="text-right">Cache write</span>
+        <section>
+          <div className="mb-2 flex items-baseline justify-between px-1">
+            <h3 className="text-12 font-semibold text-fg">List prices</h3>
+            <span className="text-11 text-faint">USD per million tokens</span>
           </div>
-          <div className="max-h-[280px] divide-y divide-line/[0.055] overflow-y-auto">
-            {models.map((model) => (
-              <div
-                key={model.id}
-                className="grid grid-cols-[minmax(0,1fr)_repeat(4,64px)] items-center gap-2 px-3.5 py-2 sm:grid-cols-[minmax(0,1fr)_repeat(4,76px)]"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: model.color }}
-                  />
-                  <span className="truncate text-11 font-medium text-fg/85">
-                    {model.label}
-                  </span>
-                </div>
-                <Price value={model.input} />
-                <Price value={model.output} />
-                <Price value={model.cacheRead} />
-                <Price value={model.cacheWrite} />
-              </div>
-            ))}
+          <div className="overflow-hidden rounded-[16px] border border-line/[0.075]">
+            <table className="w-full table-fixed text-12">
+              <colgroup>
+                <col />
+                <col className="w-[84px] sm:w-[96px]" />
+                <col className="w-[84px] sm:w-[96px]" />
+                <col className="w-[84px] sm:w-[96px]" />
+                <col className="w-[84px] sm:w-[96px]" />
+              </colgroup>
+              <thead className="bg-sunken/40 text-11 text-faint">
+                <tr className="border-b border-line/[0.065]">
+                  <th className="px-4 py-2.5 text-left font-medium">Model</th>
+                  <th className="py-2.5 pr-4 text-right font-medium">Input</th>
+                  <th className="py-2.5 pr-4 text-right font-medium">Output</th>
+                  <th className="py-2.5 pr-4 text-right font-medium">Cache read</th>
+                  <th className="py-2.5 pr-4 text-right font-medium">Cache write</th>
+                </tr>
+              </thead>
+              {families.map(([family, rows]) => (
+                <tbody
+                  key={family}
+                  className="divide-y divide-line/[0.05] border-b border-line/[0.065] last:border-b-0"
+                >
+                  <tr>
+                    <th
+                      colSpan={5}
+                      scope="colgroup"
+                      className="bg-line/[0.02] px-4 pb-1.5 pt-2.5 text-left text-11 font-semibold text-faint"
+                    >
+                      {family}
+                    </th>
+                  </tr>
+                  {rows.map((model) => (
+                    <tr key={model.id}>
+                      <td className="px-4 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: model.color }}
+                          />
+                          <span className="truncate font-medium text-fg/85">{model.label}</span>
+                        </div>
+                      </td>
+                      <Price value={model.input} />
+                      <Price value={model.output} />
+                      <Price value={model.cacheRead} />
+                      <Price value={model.cacheWrite} />
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+            </table>
           </div>
-        </div>
+        </section>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <FormulaCard
-            label="Estimated cost"
-            formula="(input × in + output × out + cache read × read + cache write × write) ÷ 1M"
-            detail="Prices in USD per million tokens."
-          />
-          <FormulaCard
-            label="Cache savings"
-            formula="cache read × (input price − cache read price) ÷ 1M"
-            detail="Gross cache-read savings; cache-write costs are not deducted."
-          />
-          <FormulaCard
-            label="Tokens counted"
-            formula="input + output + cache read + cache write"
-            detail="Each category is counted once; cached input is never double-counted as regular input."
-          />
-        </div>
+        <section>
+          <h3 className="mb-2 px-1 text-12 font-semibold text-fg">How figures are calculated</h3>
+          <dl className="divide-y divide-line/[0.055] rounded-[16px] border border-line/[0.075]">
+            <FormulaRow
+              label="Estimated cost"
+              formula="(input × in + output × out + cache read × read + cache write × write) ÷ 1M"
+              detail="Each token category is priced at its own rate."
+            />
+            <FormulaRow
+              label="Cache savings"
+              formula="cache read × (input price − cache read price) ÷ 1M"
+              detail="Gross cache-read savings; cache-write costs are not deducted."
+            />
+            <FormulaRow
+              label="Tokens counted"
+              formula="input + output + cache read + cache write"
+              detail="Each category is counted once; cached input is never double-counted as regular input."
+            />
+          </dl>
+        </section>
 
         <InfoNote icon={<ShieldCheck className="h-3.5 w-3.5" />}>
           Prices are stored locally and may change. Sessions with unknown prices or mixed models
@@ -1010,15 +1048,21 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
   );
 }
 
+/** Two decimals at least, more only when the rate needs them ($0.125). */
+function formatRate(value: number): string {
+  const fixed = value.toFixed(2);
+  return Number(fixed) === value ? fixed : String(value);
+}
+
 function Price({ value }: { value: number }) {
   return (
-    <span className="text-right text-11 tabular text-muted">
-      {value ? `$${value}` : "—"}
-    </span>
+    <td className="py-2 pr-4 text-right tabular text-muted">
+      {value ? `$${formatRate(value)}` : "—"}
+    </td>
   );
 }
 
-function FormulaCard({
+function FormulaRow({
   label,
   formula,
   detail,
@@ -1028,10 +1072,12 @@ function FormulaCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-[14px] border border-line/[0.075] bg-raised p-3.5">
-      <div className="text-11 font-semibold uppercase tracking-[0.1em] text-faint">{label}</div>
-      <div className="mt-2 font-mono text-11 leading-[1.6] text-fg/75">{formula}</div>
-      <div className="mt-2 text-11 leading-relaxed text-muted">{detail}</div>
+    <div className="grid gap-1 px-4 py-3 sm:grid-cols-[136px_minmax(0,1fr)] sm:gap-4">
+      <dt className="text-12 font-medium text-fg/85">{label}</dt>
+      <dd className="min-w-0">
+        <code className="block font-mono text-11 leading-[1.6] text-fg/75">{formula}</code>
+        <p className="mt-1 text-11 leading-relaxed text-muted">{detail}</p>
+      </dd>
     </div>
   );
 }
@@ -1059,9 +1105,9 @@ function PrivacyDialog({ open, onClose }: { open: boolean; onClose: () => void }
       }
     >
       <div className="space-y-5">
-        <div className="rounded-[18px] bg-[#1d1915] p-5 text-[#f3ebde] dark:border dark:border-white/[0.06] dark:bg-[#191612]">
+        <div className="rounded-[18px] bg-[var(--rail)] p-5 text-[#f3ebde] dark:border dark:border-white/[0.06] dark:bg-[var(--rail-elevated)]">
           <div className="flex items-center gap-2 text-11 font-medium text-[#f3ebde]/45">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#89a56c]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-success-solid" />
             Local-first by design
           </div>
           <p className="mt-2 max-w-[440px] text-13 leading-[1.6] tracking-[-0.01em] text-[#f3ebde]/85">
@@ -1078,7 +1124,7 @@ function PrivacyDialog({ open, onClose }: { open: boolean; onClose: () => void }
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-[15px] border border-line/[0.075] bg-raised p-4">
             <div className="flex items-center gap-2 text-12 font-semibold text-fg">
-              <CheckCircle className="h-4 w-4 text-[#7b9560]" weight="fill" />
+              <CheckCircle className="h-4 w-4 text-success" weight="fill" />
               What it reads
             </div>
             <ul className="mt-2.5 space-y-2 text-11 leading-relaxed text-muted">

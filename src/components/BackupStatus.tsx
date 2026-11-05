@@ -19,8 +19,8 @@ export function backupHeadline(latest: BackupRecord | null | undefined): string 
 }
 
 const TILE_TONE: Record<BackupFreshness, string> = {
-  recent: "bg-[#e3ecdb] text-[#4a623a] dark:bg-[#293522] dark:text-[#b8cfa5]",
-  stale: "bg-[#f4e8c9] text-[#7c6428] dark:bg-[#352d1c] dark:text-[#dbc486]",
+  recent: "bg-success-soft text-success-ink",
+  stale: "bg-warning-soft text-warning-ink",
   none: "bg-line/[0.06] text-muted",
 };
 
@@ -113,11 +113,11 @@ export function BackupTimeline({
               title={title}
               aria-label={title}
               onClick={() => onSelect?.(backup)}
-              className="group flex h-full flex-1 items-end justify-center rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7f9664]"
+              className="group flex h-full flex-1 items-end justify-center rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success-solid"
             >
               <span
                 style={{ height: `${height}%` }}
-                className="w-full max-w-[8px] rounded-full bg-[#7f9664] transition-opacity group-hover:opacity-75 dark:bg-[#93ac7a]"
+                className="w-full max-w-[8px] rounded-full bg-success-solid transition-opacity group-hover:opacity-75"
               />
             </button>
           );

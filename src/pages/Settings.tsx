@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import {
-  ArrowClockwise,
+  ArrowsClockwise,
   ArrowCounterClockwise,
   ArrowSquareOut,
   CaretRight,
@@ -205,7 +205,7 @@ export default function SettingsPage() {
               <Button
                 variant="secondary"
                 size="sm"
-                icon={<ArrowClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
+                icon={<ArrowsClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
                 onClick={() => void rescan()}
               >
                 Rescan
@@ -275,7 +275,7 @@ export default function SettingsPage() {
                           <span
                             className={cn(
                               "h-1.5 w-1.5 rounded-full",
-                              available ? "bg-[#7f9664]" : "bg-line/20",
+                              available ? "bg-success-solid" : "bg-line/20",
                             )}
                           />
                           <span className="text-11 text-faint">
@@ -359,7 +359,7 @@ export default function SettingsPage() {
         <aside className="flex flex-col gap-3.5 self-start xl:col-span-4">
           <section className="card p-5">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-[#71855a] dark:text-[#a5bd8e]" />
+              <ShieldCheck className="h-4 w-4 text-success" />
               <h2 className="text-13 font-bold tracking-[-0.02em]">Privacy</h2>
             </div>
             <ul className="mt-3 space-y-2.5">
@@ -519,8 +519,8 @@ function ThemePreview({ theme }: { theme: ThemeSetting }) {
     </div>
   );
   const dark = (
-    <div className="flex h-full w-full overflow-hidden rounded-[9px] bg-[#171512]">
-      <div className="flex w-[20%] flex-col items-center gap-1 bg-[#100e0c] py-2">
+    <div className="flex h-full w-full overflow-hidden rounded-[9px] bg-[#161514]">
+      <div className="flex w-[20%] flex-col items-center gap-1 bg-[#100f0e] py-2">
         <span className="h-2 w-2 rounded-[3px] bg-[#f3e8cd]" />
         <span className="mt-1 h-1 w-2.5 rounded-full bg-white/18" />
         <span className="h-1 w-2.5 rounded-full bg-white/8" />

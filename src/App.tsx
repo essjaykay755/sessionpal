@@ -124,7 +124,7 @@ function Shell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
           {native && scanned && error && (
-            <div className="mx-6 mb-1 flex shrink-0 items-center justify-between gap-3 rounded-[12px] border border-[#c9a25b]/20 bg-[#c9a25b]/[0.07] px-3 py-2 text-11 text-[#7d5c24] dark:text-[#dcc28e] xl:mx-8">
+            <div className="mx-6 mb-1 flex shrink-0 items-center justify-between gap-3 rounded-[12px] border border-warning-solid/25 bg-warning-solid/[0.08] px-3 py-2 text-11 text-warning xl:mx-8">
               <span className="flex min-w-0 items-center gap-2">
                 <WarningCircle className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">

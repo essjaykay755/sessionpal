@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import {
   Archive,
-  ArrowClockwise,
+  ArrowsClockwise,
   CaretDown,
   CaretLeft,
   CaretRight,
@@ -225,7 +225,7 @@ export default function ManagePage() {
             <Button
               variant="secondary"
               size="sm"
-              icon={<ArrowClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
+              icon={<ArrowsClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
               onClick={() => void rescan()}
             >
               Rescan
@@ -238,7 +238,7 @@ export default function ManagePage() {
         <ManageMeta icon={<Database className="h-4 w-4" />} label="Indexed" value={`${number(sessions.length)} sessions`} detail={`${AGENT_ORDER.filter((id) => sessions.some((s) => s.agent === id)).length} agents`} />
         <ManageMeta icon={<HardDrives className="h-4 w-4" />} label="On disk" value={bytes(totalSize)} detail="original files" />
         <ManageMeta icon={<Archive className="h-4 w-4" />} label="Last backup" value={latest ? relativeTime(latest.createdAt) : "None yet"} detail={latest ? latest.name : "Back up before deleting"} />
-        <ManageMeta icon={<ShieldCheck className="h-4 w-4 text-[#6f8a55] dark:text-[#a6bb8c]" />} label="Deletion" value="Path-checked" detail="Agent files only" />
+        <ManageMeta icon={<ShieldCheck className="h-4 w-4 text-success" />} label="Deletion" value="Path-checked" detail="Agent files only" />
       </div>
 
       <div className="grid grid-cols-1 gap-3.5 xl:grid-cols-12">
@@ -321,11 +321,11 @@ export default function ManagePage() {
               <span className="flex items-center gap-2">
                 {latest ? (
                   <span className="flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#7f9664]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-success-solid" />
                     Backup {relativeTime(latest.createdAt)}
                   </span>
                 ) : (
-                  <span className="text-[#8c6a2a] dark:text-[#d2b97d]">No backup yet</span>
+                  <span className="text-warning">No backup yet</span>
                 )}
               </span>
             </div>
@@ -569,7 +569,7 @@ export default function ManagePage() {
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-[20px] bg-[#1d1915] p-[18px] text-[#f3ebde] dark:border dark:border-white/[0.055] dark:bg-[#191612]">
+          <div className="relative overflow-hidden rounded-[20px] bg-[var(--rail)] p-[18px] text-[#f3ebde] dark:border dark:border-white/[0.055] dark:bg-[var(--rail-elevated)]">
             <div className="flex items-center gap-1.5 text-11 font-medium uppercase tracking-[0.12em] text-[#f3ebde]/32">
               <ShieldCheck className="h-3 w-3 text-[#d18a5d]" />
               Safe deletion

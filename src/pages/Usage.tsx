@@ -522,7 +522,7 @@ function StatCard({
           <span
             className={cn(
               "flex shrink-0 items-center gap-0.5 rounded-full bg-white/35 px-1.5 py-0.5 text-11 font-semibold tabular dark:bg-white/[0.06]",
-              delta >= 0 ? "text-[#4d6a3a] dark:text-[#b8cfa5]" : "text-[#8c4c35] dark:text-[#e8a88c]",
+              delta >= 0 ? "text-success" : "text-danger",
             )}
             title="Compared with the previous period"
           >

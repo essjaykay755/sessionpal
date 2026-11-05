@@ -97,7 +97,7 @@ export function Topbar() {
               onClick={() => openDialog({ kind: "privacy" })}
               className="hidden h-8 items-center gap-2 rounded-full border border-line/[0.1] bg-panel/80 px-2.5 text-11 font-medium text-muted transition-colors hover:bg-sunken/70 md:flex"
             >
-              <span className={cn("h-1.5 w-1.5 rounded-full", scanning ? "animate-pulse bg-copper-400" : "bg-[#ba8e43]")} />
+              <span className={cn("h-1.5 w-1.5 rounded-full", scanning ? "animate-pulse bg-copper-400" : "bg-warning-solid")} />
               {scanning ? "Scanning" : "Sample data"}
             </button>
           </Tooltip>

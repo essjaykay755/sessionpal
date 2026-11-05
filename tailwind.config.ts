@@ -14,6 +14,17 @@ export default {
         muted: "rgb(var(--muted) / <alpha-value>)",
         faint: "rgb(var(--faint) / <alpha-value>)",
         line: "rgb(var(--line) / <alpha-value>)",
+        ...Object.fromEntries(
+          (["danger", "success", "warning"] as const).map((name) => [
+            name,
+            {
+              DEFAULT: `rgb(var(--${name}) / <alpha-value>)`,
+              solid: `rgb(var(--${name}-solid) / <alpha-value>)`,
+              soft: `rgb(var(--${name}-soft) / <alpha-value>)`,
+              ink: `rgb(var(--${name}-ink) / <alpha-value>)`,
+            },
+          ]),
+        ),
         ink: {
           950: "#161411",
           900: "#1c1916",

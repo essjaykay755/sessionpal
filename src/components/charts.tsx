@@ -265,7 +265,7 @@ export function AreaChart<T>({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.15 }}
-          className="pointer-events-none absolute z-20 min-w-[148px] rounded-[13px] border border-white/10 bg-[#211d18] px-3 py-2.5 text-paper-50 shadow-float"
+          className="pointer-events-none absolute z-20 min-w-[148px] rounded-[13px] border border-white/10 bg-[#262522] px-3 py-2.5 text-paper-50 shadow-float"
           style={{
             left: `${Math.min(82, Math.max(13, (hoverPoint.x / width) * 100))}%`,
             top: Math.max(2, hoverPoint.y - 68),

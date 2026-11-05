@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import {
-  ArrowClockwise,
+  ArrowsClockwise,
   ArrowLeft,
   ArrowsInSimple,
   ArrowsOutSimple,
@@ -288,7 +288,7 @@ export default function SessionsPage() {
           <Button
             variant="secondary"
             size="sm"
-            icon={<ArrowClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
+            icon={<ArrowsClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
             onClick={() => void rescan()}
           >
             Rescan
@@ -836,7 +836,7 @@ function ToolGroup({ steps }: { steps: ToolStep[] }) {
         <span className="shrink-0 font-medium">{steps.length} tool calls</span>
         <span className="truncate text-faint">{summarizeNames(steps)}</span>
         {failures > 0 && (
-          <span className="ml-auto shrink-0 text-[#b3543f]">{failures} failed</span>
+          <span className="ml-auto shrink-0 text-danger">{failures} failed</span>
         )}
       </summary>
       <div className="ml-[13px] mt-0.5 border-l border-line/[0.08] pl-2.5">
@@ -857,12 +857,12 @@ function ToolStepRow({ step }: { step: ToolStep }) {
         <span
           className={cn(
             "h-1.5 w-1.5 shrink-0 rounded-full",
-            failed ? "bg-[#c4664f]" : step.result ? "bg-[#81976a]" : "bg-line/25",
+            failed ? "bg-danger-solid" : step.result ? "bg-success-solid" : "bg-line/25",
           )}
         />
         <span className="shrink-0 font-medium text-fg/80">{stepName(step)}</span>
         {detail && <span className="truncate font-mono text-11 text-faint">{detail}</span>}
-        {failed && <span className="ml-auto shrink-0 text-[#b3543f]">Failed</span>}
+        {failed && <span className="ml-auto shrink-0 text-danger">Failed</span>}
       </summary>
       <div className="mb-1.5 ml-2 space-y-1.5 rounded-[10px] border border-line/[0.07] bg-sunken/30 p-2.5">
         {step.call && <ToolPayload label="Input" content={step.call.content} />}
@@ -1199,7 +1199,7 @@ function DetailsPanel({
           {detail.path}
         </div>
         {!detail.deletable && (
-          <div className="mt-2.5 flex items-start gap-1.5 text-12 leading-relaxed text-[#8c6a2a] dark:text-[#d2b97d]">
+          <div className="mt-2.5 flex items-start gap-1.5 text-12 leading-relaxed text-warning">
             <WarningCircle className="mt-0.5 h-3 w-3 shrink-0" />
             This session lives inside an agent database. It can be read and exported, but not
             deleted independently.
@@ -1218,7 +1218,7 @@ function DetailsPanel({
           variant="ghost"
           size="sm"
           icon={<Trash className="h-3.5 w-3.5" />}
-          className="text-[#a84434] hover:bg-[#a84434]/[0.06] dark:text-[#e19b8c]"
+          className="text-danger hover:bg-danger/[0.08]"
           disabled={!detail.deletable}
           onClick={onDelete}
         >

@@ -1,6 +1,6 @@
 [package]
 name = "sessionpal"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local-first desktop library for AI coding agent sessions."
 authors = ["Subhojit Karmakar"]
 homepage = "https://sessionpal.app"

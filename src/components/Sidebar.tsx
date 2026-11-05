@@ -158,7 +158,9 @@ export function Sidebar() {
         {libraryNav.map(renderItem)}
       </nav>
 
-      <div className="px-3 pb-3">
+      {/* A flex column stretches the tooltip wrapper, as in the nav above, so the
+          collapsed button spans the rail and its icon sits centred. */}
+      <div className="flex flex-col px-3 pb-3">
         {renderItem({ page: "settings", label: "Settings", icon: GearSix })}
       </div>
     </motion.aside>

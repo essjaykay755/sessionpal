@@ -183,7 +183,7 @@ export default function BackupsPage() {
                     initial={false}
                     animate={{ width: `${coverage}%` }}
                     transition={{ duration: 0.12 }}
-                    className="block h-full rounded-full bg-[#81976a]"
+                    className="block h-full rounded-full bg-success-solid"
                   />
                 </div>
                 <div className="mt-1.5 text-11 text-faint">
@@ -194,7 +194,7 @@ export default function BackupsPage() {
           </div>
 
           <div className="flex items-start gap-2.5 rounded-[18px] border border-line/[0.07] bg-sunken/35 p-4">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#71855a] dark:text-[#a5bd8e]" />
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
             <div>
               <div className="text-11 font-semibold text-fg/85">No scheduled jobs</div>
               <p className="mt-0.5 text-11 leading-relaxed text-muted">
@@ -260,7 +260,7 @@ export default function BackupsPage() {
                       <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-line/[0.045] text-muted">
                         <FileZip className="h-[17px] w-[17px]" />
                         {index === 0 && (
-                          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#7f9664] ring-2 ring-panel" />
+                          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-success-solid ring-2 ring-panel" />
                         )}
                       </span>
                       <div className="min-w-0">
@@ -269,7 +269,7 @@ export default function BackupsPage() {
                             {backup.name}
                           </span>
                           {index === 0 && (
-                            <span className="shrink-0 rounded-full bg-[#e5ecdc] px-1.5 py-0.5 text-11 font-medium text-[#526b3f] dark:bg-[#293522] dark:text-[#b8cfa5]">
+                            <span className="shrink-0 rounded-full bg-success-soft px-1.5 py-0.5 text-11 font-medium text-success-ink">
                               Latest
                             </span>
                           )}
@@ -347,7 +347,7 @@ export default function BackupsPage() {
       </p>
 
       {demo && (
-        <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-[#c9a25b]/20 bg-[#c9a25b]/[0.055] px-4 py-3 text-11 leading-relaxed text-[#7d5c24] dark:text-[#dcc28e]">
+        <div className="mt-4 flex items-center gap-2 rounded-[14px] border border-warning-solid/25 bg-warning-solid/[0.08] px-4 py-3 text-11 leading-relaxed text-warning">
           <Info className="h-3.5 w-3.5 shrink-0" />
           The preview uses sample archive records. Creating or exporting one produces a real local
           ZIP with a manifest and sample transcripts. Native restores are simulated here.
