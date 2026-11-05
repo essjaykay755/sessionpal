@@ -28,6 +28,10 @@ library, plus a Tauri 2 desktop build that reads and operates on real local file
   Windows), so they can be put back until it is emptied.
 - **Manage** storage by agent and inspect where everything lives.
 
+## Download
+
+Download the installer for your computer from [GitHub Releases](https://github.com/essjaykay755/sessionpal/releases): choose the Apple Silicon or Intel `.dmg` for macOS 11 or newer, or the x64 setup `.exe` for Windows. The installers are unsigned, so macOS Gatekeeper or Windows SmartScreen may display a warning.
+
 ## First launch
 
 The desktop app asks before it reads anything:
