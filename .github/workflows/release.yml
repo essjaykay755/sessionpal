@@ -77,8 +77,13 @@ jobs:
           version=$(node -p "require('./package.json').version")
           test "$version" = "$(node -p "require('./src-tauri/tauri.conf.json').version")"
           tag="v$version"
+          mapfile -d '' files < <(find installers -type f \( -name '*.dmg' -o -name '*-setup.exe' \) -print0)
+          if [ "${#files[@]}" -ne 3 ]; then
+            echo "Expected three installer files, found ${#files[@]}."
+            exit 1
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to replace it."
             exit 1
           fi
-          gh release create "$tag" installers/* --target "$RELEASE_COMMIT" --title "SessionPal $tag" --notes "Download the installer for your system below. These builds are unsigned; macOS Gatekeeper and Windows SmartScreen may display security warnings. macOS requires version 11 or later."
+          gh release create "$tag" "${files[@]}" --target "$RELEASE_COMMIT" --title "SessionPal $tag" --notes "Download the installer for your system below. These builds are unsigned; macOS Gatekeeper and Windows SmartScreen may display security warnings. macOS requires version 11 or later."
