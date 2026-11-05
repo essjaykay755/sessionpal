@@ -215,15 +215,15 @@ pub fn remove_session(session_path: &Path) -> Result<(), String> {
         Vec::new()
     };
 
-    if let Err(error) = fs::remove_file(&session_path) {
-        errors.push(format!("{}: {error}", session_path.display()));
+    if let Err(error) = crate::util::move_to_trash(session_path) {
+        errors.push(error);
     }
     for dir in part_dirs {
         if dir.is_dir() {
             match fs::canonicalize(&dir) {
                 Ok(canonical) if canonical.starts_with(&root_canonical) => {
-                    if let Err(error) = fs::remove_dir_all(&dir) {
-                        errors.push(format!("{}: {error}", dir.display()));
+                    if let Err(error) = crate::util::move_to_trash(&dir) {
+                        errors.push(error);
                     }
                 }
                 _ => errors.push(format!("Refused to remove unsafe path: {}", dir.display())),
@@ -233,8 +233,8 @@ pub fn remove_session(session_path: &Path) -> Result<(), String> {
     if message_dir.is_dir() {
         match fs::canonicalize(&message_dir) {
             Ok(canonical) if canonical.starts_with(&root_canonical) => {
-                if let Err(error) = fs::remove_dir_all(&message_dir) {
-                    errors.push(format!("{}: {error}", message_dir.display()));
+                if let Err(error) = crate::util::move_to_trash(&message_dir) {
+                    errors.push(error);
                 }
             }
             _ => errors.push(format!(
@@ -245,8 +245,8 @@ pub fn remove_session(session_path: &Path) -> Result<(), String> {
     }
     let todo = root.join("todo").join(format!("{id}.json"));
     if todo.is_file() {
-        if let Err(error) = fs::remove_file(&todo) {
-            errors.push(format!("{}: {error}", todo.display()));
+        if let Err(error) = crate::util::move_to_trash(&todo) {
+            errors.push(error);
         }
     }
 
@@ -375,6 +375,7 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
         message_count: metas.len() as u64,
         messages: Vec::new(),
     };
+    let mut usage_days = crate::util::UsageDays::default();
 
     for meta in &metas {
         if let Some(stamp) = &meta.created {
@@ -396,20 +397,20 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
                 builder.usage.cache_read = builder.usage.cache_read.saturating_add(meta.cache_read);
                 builder.usage.cache_write =
                     builder.usage.cache_write.saturating_add(meta.cache_write);
-                if let Some(cost) = pricing::estimate(
+                let cost = pricing::estimate(
                     &canonical,
                     meta.input,
                     meta.output,
                     meta.cache_read,
                     meta.cache_write,
-                ) {
+                )
+                .or(meta.cost.filter(|cost| *cost > 0.0));
+                if let Some(cost) = cost {
                     builder.usage.cost = Some(builder.usage.cost.unwrap_or(0.0) + cost);
                     builder.known_cost = true;
-                } else if let Some(cost) = meta.cost {
-                    if cost > 0.0 {
-                        builder.usage.cost = Some(builder.usage.cost.unwrap_or(0.0) + cost);
-                        builder.known_cost = true;
-                    }
+                }
+                if let Some(stamp) = &meta.created {
+                    usage_days.add(stamp, meta.input, meta.output, meta.cache_read, meta.cache_write, cost);
                 }
             }
         } else if meta.role == "assistant" {
@@ -417,6 +418,9 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
             builder.usage.output = builder.usage.output.saturating_add(meta.output);
             builder.usage.cache_read = builder.usage.cache_read.saturating_add(meta.cache_read);
             builder.usage.cache_write = builder.usage.cache_write.saturating_add(meta.cache_write);
+            if let Some(stamp) = &meta.created {
+                usage_days.add(stamp, meta.input, meta.output, meta.cache_read, meta.cache_write, None);
+            }
         }
     }
 
@@ -484,6 +488,7 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
             model,
             models,
             usage,
+            usage_days: usage_days.into_vec(),
             format: "json".to_string(),
             path: path.to_string_lossy().to_string(),
             deletable: true,

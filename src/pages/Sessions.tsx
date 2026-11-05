@@ -1093,6 +1093,7 @@ function DetailsPanel({
         { label: "Input", value: usage.input, color: "#708d92" },
         { label: "Output", value: usage.output, color: "#b8693f" },
         { label: "Cache read", value: usage.cacheRead, color: "#88956b" },
+        { label: "Cache write", value: usage.cacheWrite, color: "#a58a5f" },
       ]
     : [];
 

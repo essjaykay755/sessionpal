@@ -58,11 +58,28 @@ impl UsageBreakdown {
         self.input == 0 && self.output == 0 && self.cache_read == 0 && self.cache_write == 0
     }
 
+    /// Every token category the provider billed. Parsers normalise categories so
+    /// they never overlap (e.g. OpenAI's cached input is subtracted from input),
+    /// so cache writes count alongside input, output and cache reads.
     pub fn tokens(&self) -> u64 {
         self.input
             .saturating_add(self.output)
             .saturating_add(self.cache_read)
+            .saturating_add(self.cache_write)
     }
+}
+
+/// Token usage that happened on one local calendar day (`YYYY-MM-DD`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayUsage {
+    pub day: String,
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    /// `None` when any usage that day came from a model without a known price.
+    pub cost: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +120,10 @@ pub struct SessionSummary {
     pub model: Option<String>,
     pub models: Vec<String>,
     pub usage: Option<UsageBreakdown>,
+    /// Usage split by the local day it happened, from message or event
+    /// timestamps. Empty when the source has no per-message timestamps.
+    #[serde(default)]
+    pub usage_days: Vec<DayUsage>,
     pub format: String,
     pub path: String,
     pub deletable: bool,
@@ -130,6 +151,14 @@ pub struct BackupRecord {
     pub agents: Vec<AgentId>,
     pub file_count: u64,
     pub path: String,
+    /// Files SessionPal can write back to the agent's own storage on restore.
+    #[serde(default)]
+    pub restorable_files: u64,
+    /// Agents whose entries are kept for inspection only. They come from live
+    /// databases (Cursor, Antigravity, database-backed OpenCode), which
+    /// SessionPal never writes to, so restore cannot put them back.
+    #[serde(default)]
+    pub archive_only_agents: Vec<AgentId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub demo: Option<bool>,
 }

@@ -39,6 +39,17 @@ export interface UsageBreakdown {
   cost: number | null;
 }
 
+/** Usage that happened on one local calendar day (`YYYY-MM-DD`). */
+export interface DayUsage {
+  day: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /** Null when part of the day's usage came from an unpriced model. */
+  cost: number | null;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "tool" | "system";
@@ -68,6 +79,11 @@ export interface SessionSummary {
   model: string | null;
   models: string[];
   usage: UsageBreakdown | null;
+  /**
+   * Usage split by the local day it happened. Empty or missing when the agent
+   * only stores session-level totals; analytics then fall back to `updatedAt`.
+   */
+  usageDays?: DayUsage[];
   format: "jsonl" | "json" | "sqlite";
   path: string;
   /** False for sessions SessionPal can see but not safely remove (e.g. inside Cursor's DB). */
@@ -92,6 +108,10 @@ export interface BackupRecord {
   agents: AgentId[];
   fileCount: number;
   path: string;
+  /** Files restore can write back to the agent's own storage. */
+  restorableFiles?: number;
+  /** Agents whose entries came from a live database and are archive-only. */
+  archiveOnlyAgents?: AgentId[];
   demo?: boolean;
 }
 

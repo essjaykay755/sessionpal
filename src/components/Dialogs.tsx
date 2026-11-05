@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { trashName } from "../lib/native";
 import {
   Archive,
   ArrowCounterClockwise,
@@ -16,7 +17,7 @@ import {
   Warning,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { AGENTS, AGENT_CLASS, AGENT_ORDER } from "../lib/agents";
+import { AGENTS, AGENT_CLASS, AGENT_ORDER, agentList, backupCoverage } from "../lib/agents";
 import { MODELS } from "../lib/pricing";
 import { useApp } from "../lib/store";
 import type { AgentId, BackupRecord, ExportFormat, SessionSummary } from "../lib/types";
@@ -437,7 +438,7 @@ function DeleteSessionsDialog({
       open={open}
       onClose={working ? () => undefined : onClose}
       title={deletable.length === 1 ? "Delete this session?" : `Delete ${deletable.length} sessions?`}
-      description="This removes the original files on your device. There is no cloud copy, so make a backup first if you might want them again."
+      description={`The original files move to your ${trashName()}, so you can put them back from there until it is emptied. There is no cloud copy.`}
       icon={<Trash className="h-5 w-5" />}
       width="lg"
       footer={
@@ -551,6 +552,7 @@ function RestoreBackupDialog({
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const backup = backups.find((item) => item.id === id) ?? null;
+  const coverage = backup ? backupCoverage(backup) : null;
 
   useEffect(() => {
     if (!open) return;
@@ -590,7 +592,7 @@ function RestoreBackupDialog({
             icon={<ArrowCounterClockwise className="h-3.5 w-3.5" />}
             loading={working}
             onClick={() => void submit()}
-            disabled={!backup}
+            disabled={!backup || !coverage?.canRestore}
           >
             {working ? "Restoring…" : "Restore backup"}
           </Button>
@@ -611,6 +613,14 @@ function RestoreBackupDialog({
               ))}
             </div>
           </div>
+
+          {coverage && coverage.archiveOnly.length > 0 && (
+            <InfoNote icon={<Database className="h-3.5 w-3.5" />}>
+              {coverage.canRestore
+                ? `${agentList(coverage.archiveOnly)} conversations in this backup are archive-only. They stay in the archive for inspection and export, but restore can't put them back into ${coverage.archiveOnly.length === 1 ? "that app" : "those apps"}.`
+                : `Everything in this backup is archive-only: ${agentList(coverage.archiveOnly)} conversations come from a live database SessionPal never writes to. Open the archive to inspect or export them.`}
+            </InfoNote>
+          )}
 
           <div className="space-y-2.5">
             <SafetyRow
@@ -688,6 +698,15 @@ function BackupDetailsDialog({
         { label: "Sessions", value: number(backup.sessionCount) },
         { label: "Files in archive", value: number(backup.fileCount) },
         { label: "Archive size", value: bytes(backup.sizeBytes) },
+        {
+          label: "Restore",
+          value: (() => {
+            const { archiveOnly, canRestore } = backupCoverage(backup);
+            if (!archiveOnly.length) return "Fully restorable";
+            if (!canRestore) return "Archive only";
+            return `Restorable · ${agentList(archiveOnly)} archive only`;
+          })(),
+        },
         {
           label: "Agents",
           value: (
@@ -844,7 +863,7 @@ function DeleteBackupDialog({
       open={open}
       onClose={working ? () => undefined : onClose}
       title="Delete this backup?"
-      description="The archive file will be removed from disk. Your current sessions are not affected."
+      description={`The archive moves to your ${trashName()}. Your current sessions are not affected.`}
       icon={<Trash className="h-5 w-5" />}
       width="sm"
       footer={
@@ -977,8 +996,8 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
           />
           <FormulaCard
             label="Tokens counted"
-            formula="input + output + cache read"
-            detail="Cache writes are billed but not counted as read tokens."
+            formula="input + output + cache read + cache write"
+            detail="Each category is counted once; cached input is never double-counted as regular input."
           />
         </div>
 

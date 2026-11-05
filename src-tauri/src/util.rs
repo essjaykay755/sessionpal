@@ -325,3 +325,85 @@ pub fn is_injected_context(text: &str) -> bool {
             .is_some_and(|next| next == '>' || next == ' ' || next == '/' || next == '\n')
     })
 }
+
+/// The local calendar day (`YYYY-MM-DD`) of an RFC 3339 timestamp.
+pub fn local_day(stamp: &str) -> Option<String> {
+    DateTime::parse_from_rfc3339(stamp)
+        .ok()
+        .map(|time| time.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string())
+}
+
+/// Accumulates usage per local day so charts can place tokens on the day they
+/// were spent rather than on a session's last-updated date.
+#[derive(Default)]
+pub struct UsageDays {
+    days: std::collections::BTreeMap<String, crate::models::DayUsage>,
+}
+
+impl UsageDays {
+    /// `cost` is `None` when the model has no known price; that marks the day's
+    /// cost as unknown rather than silently under-reporting it.
+    pub fn add(
+        &mut self,
+        stamp: &str,
+        input: u64,
+        output: u64,
+        cache_read: u64,
+        cache_write: u64,
+        cost: Option<f64>,
+    ) {
+        if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 {
+            return;
+        }
+        let Some(day) = local_day(stamp) else {
+            return;
+        };
+        let entry = self
+            .days
+            .entry(day.clone())
+            .or_insert_with(|| crate::models::DayUsage {
+                day,
+                cost: Some(0.0),
+                ..Default::default()
+            });
+        entry.input = entry.input.saturating_add(input);
+        entry.output = entry.output.saturating_add(output);
+        entry.cache_read = entry.cache_read.saturating_add(cache_read);
+        entry.cache_write = entry.cache_write.saturating_add(cache_write);
+        entry.cost = match (entry.cost, cost) {
+            (Some(total), Some(cost)) => Some(total + cost),
+            _ => None,
+        };
+    }
+
+    pub fn into_vec(self) -> Vec<crate::models::DayUsage> {
+        self.days
+            .into_values()
+            .map(|mut day| {
+                day.cost = day.cost.map(|cost| (cost * 10_000.0).round() / 10_000.0);
+                day
+            })
+            .collect()
+    }
+}
+
+/// Moves a file or folder to the operating system's Trash / Recycle Bin so a
+/// mistaken delete can be recovered. Never falls back to a permanent delete:
+/// if the Trash is unavailable the error is returned and nothing is removed.
+pub fn move_to_trash(path: &Path) -> Result<(), String> {
+    #[cfg(not(test))]
+    {
+        trash::delete(path)
+            .map_err(|error| format!("Could not move {} to the Trash: {error}", display_path(path)))
+    }
+    // Tests must not fill the developer's real Trash with fixtures.
+    #[cfg(test)]
+    {
+        let result = if path.is_dir() {
+            fs::remove_dir_all(path)
+        } else {
+            fs::remove_file(path)
+        };
+        result.map_err(|error| format!("Could not remove {}: {error}", display_path(path)))
+    }
+}

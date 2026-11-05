@@ -27,6 +27,7 @@ dirs = "6"
 walkdir = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+trash = "5"
 
 [dev-dependencies]
 tempfile = "3"

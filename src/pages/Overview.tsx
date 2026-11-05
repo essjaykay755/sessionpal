@@ -23,10 +23,12 @@ import {
   cumulativeSessionSeries,
   filterRange,
   RANGE_SHORT,
+  rangeWindow,
   usageTotals,
 } from "../lib/analytics";
 import { demoSessionDetail } from "../lib/demo";
 import { modelInfo } from "../lib/pricing";
+import { platform } from "../lib/native";
 import { useApp } from "../lib/store";
 import type { AgentId, RangeKey, SessionSummary } from "../lib/types";
 import {
@@ -91,7 +93,10 @@ export default function OverviewPage() {
     [sessions],
   );
   const recentUsageSessions = useMemo(() => filterRange(sessions, "30d"), [sessions]);
-  const usage30 = useMemo(() => usageTotals(recentUsageSessions), [recentUsageSessions]);
+  const usage30 = useMemo(
+    () => usageTotals(recentUsageSessions, rangeWindow("30d")),
+    [recentUsageSessions],
+  );
   const hasUnpricedUsage = usage30.pricedSessions < usage30.sessionsWithUsage;
   const agents = useMemo(() => agentStats(sessions), [sessions]);
   const chart = useMemo(
@@ -120,7 +125,7 @@ export default function OverviewPage() {
       onSelect: () => openDialog({ kind: "export-sessions", ids: [session.id] }),
     },
     {
-      label: "Reveal in Finder",
+      label: platform() === "windows" ? "Show in Explorer" : "Reveal in Finder",
       icon: <FolderOpen className="h-3.5 w-3.5" />,
       onSelect: () => void revealLocation(session.path, session.title),
     },

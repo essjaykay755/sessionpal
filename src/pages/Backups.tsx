@@ -18,7 +18,7 @@ import type { BackupRecord } from "../lib/types";
 import { bytes, cn, homePath, number, relativeTime } from "../lib/utils";
 import { Badge, Button, EmptyState, KebabMenu } from "../components/ui";
 import { AgentMark } from "../components/Brand";
-import { AGENT_CLASS, AGENTS } from "../lib/agents";
+import { AGENT_CLASS, AGENTS, backupCoverage } from "../lib/agents";
 import { PageHeader, PageScroll, SectionTitle } from "../components/PageChrome";
 import {
   BackupStatusIcon,
@@ -300,7 +300,11 @@ export default function BackupsPage() {
                         {backup.agents.map((agent) => (
                           <span
                             key={agent}
-                            title={AGENTS[agent].name}
+                            title={
+                              backupCoverage(backup).archiveOnly.includes(agent)
+                                ? `${AGENTS[agent].name} · archive only`
+                                : AGENTS[agent].name
+                            }
                             className={cn(
                               AGENT_CLASS[agent],
                               "flex h-6 w-6 items-center justify-center rounded-full bg-[var(--agent-soft)] text-[var(--agent-ink)] ring-2 ring-panel",
@@ -310,7 +314,14 @@ export default function BackupsPage() {
                           </span>
                         ))}
                       </div>
-                      <div className="mt-1 text-11 text-faint">{number(backup.fileCount)} files</div>
+                      <div className="mt-1 text-11 text-faint">
+                        {number(backup.fileCount)} files
+                        {(() => {
+                          const { archiveOnly, canRestore } = backupCoverage(backup);
+                          if (!archiveOnly.length) return null;
+                          return canRestore ? " · partly archive only" : " · archive only";
+                        })()}
+                      </div>
                     </div>
                     <div className="hidden text-right text-11 tabular text-muted md:block">
                       {number(backup.sessionCount)}

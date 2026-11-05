@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use crate::models::{AgentDetection, AgentId, SessionDetail, SessionLocator, SessionSummary};
 use crate::paths;
-use crate::util::display_path;
 
 pub mod antigravity;
 pub mod claude;
@@ -180,8 +179,7 @@ pub fn delete_session(locator: &SessionLocator) -> Result<(), String> {
         );
     }
     match locator.agent {
-        AgentId::Claude | AgentId::Codex => std::fs::remove_file(&validated)
-            .map_err(|error| format!("Could not delete {}: {error}", display_path(&validated))),
+        AgentId::Claude | AgentId::Codex => crate::util::move_to_trash(&validated),
         AgentId::Opencode => opencode::remove_session(&validated),
         AgentId::Cursor | AgentId::Antigravity => unreachable!(),
     }

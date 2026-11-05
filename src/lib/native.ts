@@ -23,6 +23,11 @@ export function platform(): Platform {
   return "macos";
 }
 
+/** Where deleted sessions and backups go, in the platform's own words. */
+export function trashName(): string {
+  return platform() === "windows" ? "Recycle Bin" : "Trash";
+}
+
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!isTauri) throw new Error("Native bridge unavailable in the browser preview.");
   const api = await import("@tauri-apps/api/core");

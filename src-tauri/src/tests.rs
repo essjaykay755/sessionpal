@@ -51,7 +51,9 @@ fn parses_claude_jsonl_sessions() {
     assert_eq!(usage.cache_read, 1000);
     assert_eq!(usage.cache_write, 200);
     assert_eq!(usage.cost, Some(0.0021));
-    assert_eq!(summary.tokens, 1150);
+    assert_eq!(summary.tokens, 1350);
+    assert_eq!(summary.usage_days.len(), 1);
+    assert_eq!(summary.usage_days[0].input, 100);
     assert!(summary.deletable);
 
     let detail = claude::detail(&file).unwrap();
@@ -442,6 +444,9 @@ fn restore_adds_missing_files_and_never_overwrites() {
     )
     .unwrap();
     let archive = PathBuf::from(&record.path);
+    // Claude's file comes back on restore; Cursor's chat rows are archive-only.
+    assert_eq!(record.archive_only_agents, vec![AgentId::Cursor]);
+    assert_eq!(record.restorable_files, 1);
     let manifest = backup::read_manifest(&archive).unwrap();
 
     // A deleted session comes back.
@@ -936,4 +941,47 @@ fn opens_a_closed_wal_database_without_writing() {
     fs::set_permissions(&folder, fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(result.unwrap(), "kept");
     assert_eq!(leftovers.len(), 1, "no sidecar files were created");
+}
+
+#[test]
+fn codex_usage_is_split_by_the_day_it_happened() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("sessions").join("2026").join("11").join("02");
+    let file = root.join("rollout-2026-11-02-days.jsonl");
+    write(
+        &file,
+        concat!(
+            r#"{"timestamp":"2026-11-02T12:00:00.000Z","type":"session_meta","payload":{"id":"codex-days","cwd":"/tmp/api-core"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-02T12:00:01.000Z","type":"turn_context","payload":{"model":"gpt-5.1-codex"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-02T12:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Day one"}]}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-02T12:00:10.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":400,"output_tokens":100}}}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-04T12:00:10.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1500,"cached_input_tokens":500,"output_tokens":300}}}}"#,
+            "\n",
+        ),
+    );
+
+    let sessions = codex::scan(&[temp.path().join("sessions")]);
+    let summary = &sessions[0];
+    let days = &summary.usage_days;
+    assert_eq!(days.len(), 2);
+    assert_eq!((days[0].input, days[0].cache_read, days[0].output), (600, 400, 100));
+    assert_eq!((days[1].input, days[1].cache_read, days[1].output), (400, 100, 200));
+    let usage = summary.usage.as_ref().unwrap();
+    assert_eq!(days.iter().map(|day| day.input).sum::<u64>(), usage.input);
+    assert_eq!(summary.tokens, 1800);
+}
+
+#[test]
+fn pricing_catalog_is_shared_and_complete() {
+    assert_eq!(crate::pricing::catalog_len(), 17);
+    // Dated snapshots resolve to their base model; unknown models stay unpriced.
+    assert_eq!(
+        crate::pricing::estimate("claude-sonnet-4-5-20250929", 1_000_000, 0, 0, 0),
+        Some(3.0)
+    );
+    assert_eq!(crate::pricing::estimate("some-unknown-model", 1, 1, 1, 1), None);
 }

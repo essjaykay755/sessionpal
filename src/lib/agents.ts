@@ -1,4 +1,4 @@
-import type { AgentId, AgentMeta, ProjectMeta, Tint } from "./types";
+import type { AgentId, AgentMeta, BackupRecord, ProjectMeta, Tint } from "./types";
 
 export const AGENT_ORDER: AgentId[] = ["claude", "codex", "cursor", "opencode", "antigravity"];
 
@@ -211,3 +211,28 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   opencode: AGENTS.opencode.name,
   antigravity: AGENTS.antigravity.name,
 };
+
+/**
+ * What restore can do for a backup. Entries copied from a live database
+ * (Cursor, Antigravity, database-backed OpenCode) are archive-only. Archives
+ * made before this was recorded fall back to the always-database agents.
+ */
+export function backupCoverage(backup: BackupRecord): {
+  archiveOnly: AgentId[];
+  canRestore: boolean;
+} {
+  const archiveOnly =
+    backup.archiveOnlyAgents ??
+    backup.agents.filter((agent) => agent === "cursor" || agent === "antigravity");
+  const canRestore =
+    backup.restorableFiles !== undefined
+      ? backup.restorableFiles > 0
+      : backup.agents.some((agent) => !archiveOnly.includes(agent));
+  return { archiveOnly, canRestore };
+}
+
+export function agentList(agents: AgentId[]): string {
+  const names = agents.map((agent) => AGENTS[agent].name);
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}

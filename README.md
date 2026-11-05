@@ -24,7 +24,8 @@ library, plus a Tauri 2 desktop build that reads and operates on real local file
 - **Restore** archives safely: validate every entry, stage the extraction, and
   write back only files that are missing. Existing files are never overwritten.
 - **Delete** individual sessions or a selection, with explicit confirmation and
-  strict path validation.
+  strict path validation. Deleted files move to the Trash (Recycle Bin on
+  Windows), so they can be put back until it is emptied.
 - **Manage** storage by agent and inspect where everything lives.
 
 ## Privacy and safety
@@ -50,6 +51,11 @@ library, plus a Tauri 2 desktop build that reads and operates on real local file
   unsupported entry kinds and oversized archives. Files are staged in a
   temporary folder before any live file is touched.
 - Backups are created only when you ask; there are no scheduled jobs.
+- Backups of Claude Code, Codex and file-based OpenCode sessions are
+  **restorable**. Cursor, Antigravity and database-backed OpenCode
+  conversations are **archive only**: they are kept in the archive for
+  inspection and export, but restore never writes them into those apps' live
+  databases. The Backups page labels each archive accordingly.
 
 ## Supported agents
 
@@ -162,8 +168,9 @@ The real path is resolved at runtime and shown in **Settings** and **Backups**.
 
 ## Cost estimates
 
-`src/lib/pricing.ts` mirrors the published API list prices used by the Rust
-backend. SessionPal does not know your subscription, credits, or provider
+Prices live in a single catalog, `src/lib/pricing-catalog.json`, read by both
+the frontend and the Rust backend, so the two can never disagree. Each model
+records its source; update `verifiedAt` when you re-check the published rates. SessionPal does not know your subscription, credits, or provider
 billing. Every amount shown is an **API-equivalent estimate** and is labelled as
 such in the UI. Cache savings are computed from the same public table.
 
@@ -173,9 +180,13 @@ such in the UI. Cache savings are computed from the same public table.
   are defensive, but unknown fields are ignored rather than guessed.
 - Token usage is only available where the agent recorded it. A session without
   usage metadata shows tokens as unknown rather than inventing numbers.
+- Daily usage charts place tokens on the day each message was recorded.
+  Database-backed OpenCode and Antigravity only store session totals, so their
+  usage is shown on the day the session was last active, and the chart says so.
 - Cursor transcripts depend on the shape of its internal key-value database.
-- Restoring a backup replaces the files listed in its manifest. Other sessions
-  are untouched; Cursor's database is replaced as a whole.
+- Restoring a backup only writes back files that are missing. Existing files,
+  including sessions that continued after the backup, are never overwritten,
+  and no agent database (Cursor, OpenCode, Antigravity) is ever restored.
 - SessionPal is not affiliated with Anthropic, OpenAI, Cursor, OpenCode or Google.
 
 ## Contributing

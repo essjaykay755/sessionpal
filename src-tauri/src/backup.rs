@@ -255,21 +255,19 @@ pub(crate) fn create_backup_in(
     }
     fs::rename(&temp_path, &final_path)
         .map_err(|error| format!("Could not finalize the backup archive: {error}"))?;
-    let size_bytes = fs::metadata(&final_path)
-        .map(|meta| meta.len())
-        .unwrap_or(0);
+    Ok(record_from_manifest(&final_path, &manifest))
+}
 
-    Ok(BackupRecord {
-        id,
-        name,
-        created_at,
-        size_bytes,
-        session_count: sessions.len() as u64,
-        agents,
-        file_count: (payload.len() + 3) as u64,
-        path: final_path.to_string_lossy().to_string(),
-        demo: None,
-    })
+/// Entries copied from another app's live database. Restore never writes them back.
+fn is_archive_only(kind: &str) -> bool {
+    matches!(
+        kind,
+        "cursor-db"
+            | "cursor-chats"
+            | "opencode-chats"
+            | "antigravity-index"
+            | "antigravity-conversation"
+    )
 }
 
 /// The file's path below the agent root it lives in, using `/` separators.
@@ -518,6 +516,19 @@ pub fn list_backups(app: &tauri::AppHandle) -> Result<Vec<BackupRecord>, String>
 }
 
 fn record_from_manifest(path: &Path, manifest: &BackupManifest) -> BackupRecord {
+    let mut archive_only_agents: Vec<AgentId> = manifest
+        .files
+        .iter()
+        .filter(|file| is_archive_only(&file.kind))
+        .map(|file| file.agent)
+        .collect();
+    archive_only_agents.sort();
+    archive_only_agents.dedup();
+    let restorable_files = manifest
+        .files
+        .iter()
+        .filter(|file| !is_archive_only(&file.kind))
+        .count() as u64;
     BackupRecord {
         id: manifest.id.clone(),
         name: manifest.name.clone(),
@@ -527,6 +538,8 @@ fn record_from_manifest(path: &Path, manifest: &BackupManifest) -> BackupRecord 
         agents: manifest.agents.clone(),
         file_count: manifest.file_count,
         path: path.to_string_lossy().to_string(),
+        restorable_files,
+        archive_only_agents,
         demo: None,
     }
 }
@@ -581,8 +594,7 @@ pub fn delete_backup(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
     if !path_canonical.starts_with(&dir_canonical) {
         return Err("Refused to delete an archive outside the backup folder.".to_string());
     }
-    fs::remove_file(&path_canonical)
-        .map_err(|error| format!("Could not delete the backup: {error}"))
+    crate::util::move_to_trash(&path_canonical)
 }
 
 pub fn export_backup(

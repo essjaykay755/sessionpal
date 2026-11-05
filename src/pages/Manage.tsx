@@ -18,7 +18,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { AGENT_CLASS, AGENTS, AGENT_ORDER } from "../lib/agents";
-import { platform } from "../lib/native";
+import { platform, trashName } from "../lib/native";
 import { matchesSession, searchTokens, SESSION_SEARCH_PLACEHOLDER } from "../lib/search";
 import { useApp } from "../lib/store";
 import type { AgentId, SessionSummary } from "../lib/types";
@@ -634,7 +634,7 @@ export default function ManagePage() {
             <Info className="mt-0.5 h-3 w-3 shrink-0" />
             {demo
               ? "Preview deletions update the sample library only; real files on your device are untouched."
-              : "Deletions remove the selected source files from disk. Export or back up anything you may want later."}
+              : `Deleted sessions move to your ${trashName()}, where you can put them back until it is emptied.`}
           </div>
         </aside>
       </div>

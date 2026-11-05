@@ -38,6 +38,7 @@ import {
   revealPath as revealNativePath,
   saveDialog,
   toggleMaximizeWindow,
+  trashName,
 } from "./native";
 import type {
   ActivityEvent,
@@ -681,16 +682,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           detail: result.errors.length
             ? `${number(result.deleted)} removed · ${result.errors.length} failed`
             : result.skipped > 0
-              ? `${bytes(reclaimed)} reclaimed · ${result.skipped} skipped`
-              : `${bytes(reclaimed)} reclaimed`,
+              ? `${bytes(reclaimed)} moved to the ${trashName()} · ${result.skipped} skipped`
+              : `${bytes(reclaimed)} moved to the ${trashName()}`,
         });
         notify(
           result.deleted === 1 ? "Session deleted" : `${number(result.deleted)} sessions deleted`,
           result.errors.length
             ? `${result.errors.length} file operation(s) failed. The library was refreshed from disk.`
             : result.skipped
-              ? `${bytes(reclaimed)} freed. ${result.skipped} database-managed sessions were left untouched.`
-              : `${bytes(reclaimed)} freed on this device.`,
+              ? `Moved to the ${trashName()}. ${result.skipped} database-managed sessions were left untouched.`
+              : `Moved to the ${trashName()}. Restore from there if you change your mind.`,
           result.errors.length ? "danger" : "success",
         );
       }
@@ -760,8 +761,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         notify(
           "Available in the desktop app",
           label
-            ? `Finder reveal for ${label} is handled natively by SessionPal.`
-            : "SessionPal reveals local files with Finder when running as a desktop app.",
+            ? `Revealing ${label} in your file manager works in the desktop app.`
+            : "SessionPal reveals local files in your file manager when running as a desktop app.",
         );
         return;
       }

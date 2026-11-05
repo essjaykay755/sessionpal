@@ -298,6 +298,8 @@ fn summarize(connection: &Connection, db: &Path, row: &SessionRow) -> SessionSum
         models: model.iter().cloned().collect(),
         model,
         usage,
+        // Only session-level totals are available here.
+        usage_days: Vec::new(),
         format: "sqlite".to_string(),
         path: db.to_string_lossy().to_string(),
         // Never write to another app's live database.

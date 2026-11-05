@@ -116,6 +116,7 @@ struct Builder {
     cost: f64,
     known_cost: bool,
     unknown_cost: bool,
+    usage_days: crate::util::UsageDays,
     models: HashMap<String, u64>,
     messages: Vec<Message>,
     seen_entries: HashSet<String>,
@@ -141,6 +142,7 @@ impl Builder {
             cost: 0.0,
             known_cost: false,
             unknown_cost: false,
+            usage_days: crate::util::UsageDays::default(),
             models: HashMap::new(),
             messages: Vec::new(),
             seen_entries: HashSet::new(),
@@ -341,6 +343,7 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
             model,
             models: model_list,
             usage,
+            usage_days: builder.usage_days.into_vec(),
             format: "jsonl".to_string(),
             path: path.to_string_lossy().to_string(),
             deletable: true,
@@ -492,12 +495,16 @@ fn parse_assistant_entry(
             .saturating_add(cache_read)
             .saturating_add(cache_write);
         if message_tokens > 0 {
-            if let Some(cost) = pricing::estimate(&model, input, output, cache_read, cache_write) {
+            let cost = pricing::estimate(&model, input, output, cache_read, cache_write);
+            if let Some(cost) = cost {
                 builder.cost += cost;
                 builder.known_cost = true;
             } else {
                 builder.unknown_cost = true;
             }
+            builder
+                .usage_days
+                .add(stamp, input, output, cache_read, cache_write, cost);
         }
     }
 

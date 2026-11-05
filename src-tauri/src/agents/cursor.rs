@@ -258,6 +258,7 @@ fn parse_composer(
     let mut cache_write = 0u64;
     let mut cost = 0.0f64;
     let mut known_cost = false;
+    let mut usage_days = crate::util::UsageDays::default();
     let mut earliest = created.clone();
     let mut latest = updated.clone();
     let mut messages = Vec::new();
@@ -280,18 +281,27 @@ fn parse_composer(
             output = output.saturating_add(bubble.output);
             cache_read = cache_read.saturating_add(bubble.cache_read);
             cache_write = cache_write.saturating_add(bubble.cache_write);
-            if let Some(model) = &bubble.model {
-                if let Some(estimate) = pricing::estimate(
+            let estimate = bubble.model.as_deref().and_then(|model| {
+                pricing::estimate(
                     model,
                     bubble.input,
                     bubble.output,
                     bubble.cache_read,
                     bubble.cache_write,
-                ) {
-                    cost += estimate;
-                    known_cost = true;
-                }
+                )
+            });
+            if let Some(estimate) = estimate {
+                cost += estimate;
+                known_cost = true;
             }
+            usage_days.add(
+                &bubble.timestamp,
+                bubble.input,
+                bubble.output,
+                bubble.cache_read,
+                bubble.cache_write,
+                estimate,
+            );
         }
         if with_messages {
             if !bubble.text.trim().is_empty() {
@@ -374,6 +384,7 @@ fn parse_composer(
             model,
             models,
             usage,
+            usage_days: usage_days.into_vec(),
             format: "sqlite".to_string(),
             path: db.to_string_lossy().to_string(),
             deletable: false,

@@ -4,6 +4,7 @@ import type {
   ActivityEvent,
   AgentId,
   BackupRecord,
+  DayUsage,
   Message,
   SessionDetail,
   SessionSummary,
@@ -1053,7 +1054,41 @@ for (const agent of AGENT_ORDER) {
   }
 }
 
-export const DEMO_SESSIONS: SessionSummary[] = [...FEATURED, ...filler].sort(
+function dateKey(value: Date): string {
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${value.getFullYear()}-${month}-${day}`;
+}
+
+/** Spread a sample session's usage evenly across the local days it spans. */
+function withUsageDays(session: SessionSummary): SessionSummary {
+  const usage = session.usage;
+  if (!usage) return session;
+  const keys: string[] = [];
+  const day = new Date(session.createdAt);
+  day.setHours(0, 0, 0, 0);
+  const last = new Date(session.updatedAt);
+  while (day <= last && keys.length < 400) {
+    keys.push(dateKey(day));
+    day.setDate(day.getDate() + 1);
+  }
+  if (!keys.length) return session;
+  const share = (value: number, index: number) => {
+    const base = Math.floor(value / keys.length);
+    return index === keys.length - 1 ? value - base * (keys.length - 1) : base;
+  };
+  const usageDays: DayUsage[] = keys.map((key, index) => ({
+    day: key,
+    input: share(usage.input, index),
+    output: share(usage.output, index),
+    cacheRead: share(usage.cacheRead, index),
+    cacheWrite: share(usage.cacheWrite, index),
+    cost: usage.cost === null ? null : usage.cost / keys.length,
+  }));
+  return { ...session, usageDays };
+}
+
+export const DEMO_SESSIONS: SessionSummary[] = [...FEATURED, ...filler].map(withUsageDays).sort(
   (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
 );
 

@@ -155,6 +155,7 @@ struct Builder {
     model: Option<String>,
     models: HashSet<String>,
     totals: TokenTotals,
+    usage_days: crate::util::UsageDays,
     messages: Vec<Message>,
     message_count: u64,
     tool_names: HashMap<String, String>,
@@ -173,6 +174,7 @@ impl Builder {
             model: None,
             models: HashSet::new(),
             totals: TokenTotals::new(),
+            usage_days: crate::util::UsageDays::default(),
             messages: Vec::new(),
             message_count: 0,
             tool_names: HashMap::new(),
@@ -307,12 +309,37 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
                             .and_then(Value::as_u64)
                             .unwrap_or(0);
                         // OpenAI reports cached input as a subset of input tokens.
-                        builder.totals = TokenTotals {
+                        let next = TokenTotals {
                             input: input.saturating_sub(cached),
                             output,
                             cache_read: cached,
                             cache_write: 0,
                         };
+                        // Totals are cumulative, so the day's share is the delta.
+                        let delta = TokenTotals {
+                            input: next.input.saturating_sub(builder.totals.input),
+                            output: next.output.saturating_sub(builder.totals.output),
+                            cache_read: next.cache_read.saturating_sub(builder.totals.cache_read),
+                            cache_write: 0,
+                        };
+                        let cost = builder.model.as_deref().and_then(|model| {
+                            pricing::estimate(
+                                model,
+                                delta.input,
+                                delta.output,
+                                delta.cache_read,
+                                delta.cache_write,
+                            )
+                        });
+                        builder.usage_days.add(
+                            &message_stamp,
+                            delta.input,
+                            delta.output,
+                            delta.cache_read,
+                            delta.cache_write,
+                            cost,
+                        );
+                        builder.totals = next;
                     }
                 }
             }
@@ -402,6 +429,7 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
             model: primary_model,
             models,
             usage,
+            usage_days: builder.usage_days.into_vec(),
             format: "jsonl".to_string(),
             path: path.to_string_lossy().to_string(),
             deletable: true,

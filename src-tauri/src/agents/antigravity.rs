@@ -523,6 +523,8 @@ fn summarize(loaded: &Loaded, index: &Path, row: &Row, segments: &[Segment]) -> 
         models: generations.models,
         model,
         usage,
+        // Only session-level totals are available here.
+        usage_days: Vec::new(),
         format: "sqlite".to_string(),
         path: index.to_string_lossy().to_string(),
         // Never write to another app's live data.

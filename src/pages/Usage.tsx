@@ -15,11 +15,16 @@ import {
   dailyUsage,
   filterRange,
   modelStats,
+  overlapsWindow,
   RANGE_LABELS,
   RANGE_SHORT,
+  rangeWindow,
   sessionUsageParts,
+  undatedUsageSessions,
+  usageInWindow,
   usageTotals,
 } from "../lib/analytics";
+import { usageTokens } from "../lib/pricing";
 import { useApp } from "../lib/store";
 import type { RangeKey, Tint } from "../lib/types";
 import {
@@ -46,45 +51,45 @@ export default function UsagePage() {
   const [range, setRange] = useState<RangeKey>("30d");
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
 
+  const span = useMemo(() => rangeWindow(range), [range]);
   const ranged = useMemo(() => filterRange(sessions, range), [sessions, range]);
-  const totals = useMemo(() => usageTotals(ranged), [ranged]);
+  const totals = useMemo(() => usageTotals(ranged, span), [ranged, span]);
   const hasUnpricedUsage = totals.pricedSessions < totals.sessionsWithUsage;
   const hasIncompleteSavings = totals.savingsSessions < totals.sessionsWithUsage;
   const hasPricedSessions = totals.pricedSessions > 0;
   const displayedMetric = hasPricedSessions ? metric : "tokens";
-  const days = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 }[range];
-  const previous = useMemo(() => {
-    const now = Date.now();
-    return sessions.filter((session) => {
-      const stamp = new Date(session.updatedAt).getTime();
-      return now - stamp > days * 86_400_000 && now - stamp <= days * 2 * 86_400_000;
-    });
-  }, [sessions, days]);
-  const previousTotals = useMemo(() => usageTotals(previous), [previous]);
+  const previousWindow = useMemo(() => rangeWindow(range, Date.now(), 1), [range]);
+  const previous = useMemo(
+    () => sessions.filter((session) => overlapsWindow(session, previousWindow)),
+    [sessions, previousWindow],
+  );
+  const previousTotals = useMemo(() => usageTotals(previous, previousWindow), [previous, previousWindow]);
   const previousHasUnpricedUsage = previousTotals.pricedSessions < previousTotals.sessionsWithUsage;
   const daily = useMemo(() => dailyUsage(sessions, range), [sessions, range]);
-  const agents = useMemo(() => agentStats(ranged), [ranged]);
-  const models = useMemo(() => modelStats(ranged), [ranged]);
-  const parts = useMemo(() => sessionUsageParts(ranged), [ranged]);
+  const undated = useMemo(() => undatedUsageSessions(ranged), [ranged]);
+  const agents = useMemo(() => agentStats(ranged, span), [ranged, span]);
+  const models = useMemo(() => modelStats(ranged, span), [ranged, span]);
+  const parts = useMemo(() => sessionUsageParts(ranged, span), [ranged, span]);
   const projects = useMemo(() => {
     const map = new Map<string, { label: string; sessions: number; tokens: number }>();
     for (const session of ranged) {
+      const tokens = usageTokens(usageInWindow(session, span));
       const current = map.get(session.project);
       if (current) {
         current.sessions += 1;
-        current.tokens += session.tokens;
+        current.tokens += tokens;
       } else {
         map.set(session.project, {
           label: session.projectLabel,
           sessions: 1,
-          tokens: session.tokens,
+          tokens,
         });
       }
     }
     return Array.from(map.values())
       .sort((a, b) => b.tokens - a.tokens)
       .slice(0, 5);
-  }, [ranged]);
+  }, [ranged, span]);
 
   const chartColor =
     displayedMetric === "cost"
@@ -133,7 +138,7 @@ export default function UsagePage() {
           value={<AnimatedNumber value={totals.tokens} format={compact} />}
           meta={
             totals.cacheRead > 0
-              ? `${compact(totals.tokens - totals.cacheRead)} input + output · ${compact(totals.cacheRead)} cache reads`
+              ? `${compact(totals.input + totals.output)} input + output · ${compact(totals.cacheRead + totals.cacheWrite)} cache`
               : `${number(totals.sessions)} sessions in ${RANGE_LABELS[range].toLowerCase()}`
           }
           icon={<ChartLineUp className="h-4 w-4" />}
@@ -233,13 +238,20 @@ export default function UsagePage() {
                 </div>
               )}
             />
+            {undated > 0 && (
+              <p className="mt-2 text-11 text-faint">
+                {number(undated)} {undated === 1 ? "session stores" : "sessions store"} only
+                session totals, so {undated === 1 ? "its" : "their"} usage is shown on the
+                day {undated === 1 ? "it was" : "they were"} last active.
+              </p>
+            )}
           </div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line/[0.06] pt-3">
             <div className="flex items-center gap-4 text-11 text-faint">
               <span className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: chartColor }} />
-                {displayedMetric === "tokens" ? "Input + output + cache read" : "Estimated from list prices"}
+                {displayedMetric === "tokens" ? "Input + output + cache read + write" : "Estimated from list prices"}
               </span>
               <span>{number(totals.sessions)} sessions</span>
             </div>
