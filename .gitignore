@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+
+# Rust build output
+src-tauri/target/
+
+# Tauri-generated schemas and bundles
+src-tauri/gen/
+src-tauri/target/bundle/
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Test and screenshot artifacts
+coverage/
+playwright-report/
+test-results/
+shots/
+*.png.tmp
