@@ -1199,3 +1199,75 @@ fn timed_real_scan() {
     crate::agents::discover();
     println!("discovered agents in {:?}", started.elapsed());
 }
+
+fn text_message(id: &str, role: &str, content: &str) -> crate::models::Message {
+    crate::models::Message {
+        id: id.to_string(),
+        role: role.to_string(),
+        content: content.to_string(),
+        timestamp: String::new(),
+        model: None,
+        tool_name: None,
+        tool_detail: None,
+        tool_status: None,
+        tokens: None,
+    }
+}
+
+#[test]
+fn searches_conversation_text_and_keeps_the_index_current() {
+    use crate::search;
+    use std::cell::Cell;
+
+    let index = search::memory_index();
+    let mut first = project_session("/tmp/a", "alpha", "Alpha");
+    first.id = "s1".into();
+    first.updated_at = "2026-11-01T10:00:00Z".into();
+    let mut second = project_session("/tmp/b", "beta", "Beta");
+    second.id = "s2".into();
+    second.agent = AgentId::Codex;
+    second.updated_at = "2026-11-02T10:00:00Z".into();
+
+    let loads = Cell::new(0);
+    let load = |session: &crate::models::SessionSummary| {
+        loads.set(loads.get() + 1);
+        Ok(match session.id.as_str() {
+            "s1" => vec![
+                text_message("m1", "user", "Why does the WebSocket reconnect loop forever?"),
+                text_message("m2", "assistant", "The backoff resets on every failed handshake."),
+                text_message("m3", "tool", "websocket.ts: 120 lines"),
+                text_message("m4", "user", "<environment_context>websocket cwd</environment_context>"),
+            ],
+            _ => vec![text_message("m1", "assistant", "Café menu rendering is fixed.")],
+        })
+    };
+
+    search::sync_with(&index, &[first.clone(), second.clone()], &load);
+    assert_eq!(loads.get(), 2);
+
+    let hits = search::search_in(&index, "websocket", 10).unwrap();
+    assert_eq!(hits.len(), 1, "tool output and injected context are not indexed");
+    assert_eq!(hits[0].id, "s1");
+    assert_eq!(hits[0].message_id, "m1");
+    assert_eq!(hits[0].matches, 1);
+    assert!(hits[0].snippet.contains("\u{1}WebSocket\u{2}"));
+
+    // Prefixes and accents match; every word must be in the same message.
+    assert_eq!(search::search_in(&index, "handsh backoff", 10).unwrap()[0].message_id, "m2");
+    assert_eq!(search::search_in(&index, "cafe", 10).unwrap()[0].agent, AgentId::Codex);
+    assert!(search::search_in(&index, "websocket backoff", 10).unwrap().is_empty());
+    assert!(search::search_in(&index, "  \"* ", 10).unwrap().is_empty());
+
+    // Unchanged conversations are not read again; removed ones leave the index.
+    search::sync_with(&index, &[first.clone()], &load);
+    assert_eq!(loads.get(), 2);
+    assert!(search::search_in(&index, "cafe", 10).unwrap().is_empty());
+
+    // A changed conversation is re-read and its old text replaced.
+    first.updated_at = "2026-11-03T10:00:00Z".into();
+    let reload = |_: &crate::models::SessionSummary| Ok(vec![text_message("m9", "user", "Totally new topic")]);
+    search::sync_with(&index, &[first], &reload);
+    assert!(search::search_in(&index, "websocket", 10).unwrap().is_empty());
+    assert_eq!(search::search_in(&index, "topic", 10).unwrap()[0].message_id, "m9");
+}
+

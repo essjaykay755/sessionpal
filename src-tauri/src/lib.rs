@@ -6,6 +6,7 @@ mod paths;
 mod pricing;
 mod projects;
 mod scan_cache;
+mod search;
 mod util;
 
 #[cfg(test)]
@@ -44,6 +45,7 @@ async fn list_sessions(
     tauri::async_runtime::spawn_blocking(move || {
         let sessions = agents::list_sessions(agents.as_deref(), &access);
         scan_cache::save_sessions(&sessions);
+        search::sync_in_background(sessions.clone());
         sessions
     })
     .await
@@ -76,6 +78,29 @@ async fn get_session(id: String, agent: AgentId, path: String) -> Result<Session
     })
     .await
     .map_err(task_failed)?
+}
+
+/// Conversations whose text contains every word of `query`, best match first.
+#[tauri::command]
+async fn search_sessions(query: String, limit: Option<usize>) -> Result<Vec<search::ContentHit>, String> {
+    tauri::async_runtime::spawn_blocking(move || search::search(&query, limit.unwrap_or(200)))
+        .await
+        .map_err(task_failed)?
+}
+
+#[tauri::command]
+async fn search_index_status() -> Result<search::IndexStatus, String> {
+    tauri::async_runtime::spawn_blocking(search::status)
+        .await
+        .map_err(task_failed)
+}
+
+/// Empties the search index; the next scan rebuilds it.
+#[tauri::command]
+async fn clear_search_index() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(search::clear)
+        .await
+        .map_err(task_failed)
 }
 
 #[tauri::command]
@@ -191,6 +216,8 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
             if let Ok(dir) = app.path().app_cache_dir() {
+                let _ = std::fs::create_dir_all(&dir);
+                search::init(&dir);
                 scan_cache::init(dir);
             }
             backup::migrate_legacy_backups(app.handle());
@@ -202,6 +229,9 @@ pub fn run() {
             cached_library,
             project_folders,
             get_session,
+            search_sessions,
+            search_index_status,
+            clear_search_index,
             list_backups,
             create_backup,
             restore_backup,

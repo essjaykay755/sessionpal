@@ -1,6 +1,7 @@
 import type {
   AgentDetection,
   AgentId,
+  ContentHit,
   BackupRecord,
   DeleteResult,
   ExportFormat,
@@ -8,6 +9,7 @@ import type {
   ProjectAccess,
   RestoreResult,
   SessionDetail,
+  SearchIndexStatus,
   SessionLocator,
 } from "./types";
 
@@ -79,6 +81,20 @@ export async function fetchSession(locator: SessionLocator): Promise<SessionDeta
     agent: locator.agent,
     path: locator.path,
   });
+}
+
+/** Conversations whose text contains every word of `query`, best match first. */
+export async function searchConversations(query: string, limit = 200): Promise<ContentHit[]> {
+  return invoke<ContentHit[]>("search_sessions", { query, limit });
+}
+
+export async function fetchSearchIndexStatus(): Promise<SearchIndexStatus> {
+  return invoke<SearchIndexStatus>("search_index_status");
+}
+
+/** Empties the search index. The next scan rebuilds it. */
+export async function clearSearchIndex(): Promise<void> {
+  await invoke("clear_search_index");
 }
 
 export async function fetchBackups(): Promise<BackupRecord[]> {

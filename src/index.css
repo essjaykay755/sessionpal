@@ -669,3 +669,32 @@
     animation: none;
   }
 }
+
+/* Words found by a conversation search, marked inside the opened transcript. */
+::highlight(search-match) {
+  background-color: rgb(221 154 117 / 0.38);
+  color: inherit;
+}
+
+/* The message a search result opened, pointed out briefly. */
+.search-focus {
+  border-radius: 14px;
+  animation: search-focus 2.4s ease-out;
+}
+
+@keyframes search-focus {
+  0%,
+  35% {
+    background-color: rgb(221 154 117 / 0.14);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-focus {
+    animation: none;
+    background-color: rgb(221 154 117 / 0.1);
+  }
+}

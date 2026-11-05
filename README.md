@@ -60,6 +60,10 @@ prompts. The browser preview can show the setup screens at
   update check in the app.
 - The browser preview uses deterministic sample data and labels itself as such.
 - All destructive actions happen only in the desktop app, after confirmation.
+- Conversation search keeps a copy of what you and the agents wrote in an
+  SQLite full-text index (`search-index.db`) in SessionPal's cache folder. It
+  never leaves the device, skips tool output, drops conversations that leave
+  the library, and can be rebuilt from Settings → Storage.
 - Cursor sessions are **read-only**. SessionPal reads `state.vscdb` through
   SQLite's read-only API and never writes to it, including during a restore.
   Cursor backups copy only chat rows (`composerData:*`, `bubbleId:*`) into a
@@ -103,7 +107,7 @@ another computer or user account is restored into this machine's agent folders.
 Six pages share the same warm paper workspace and charcoal icon rail:
 
 - **Overview** — library at a glance, recent sessions, storage and activity.
-- **Sessions** — searchable, filterable list with a full transcript reader.
+- **Sessions** — filterable list with a full transcript reader. Search matches titles, projects and models, and also the text of every conversation through a local full-text index.
 - **Usage & cost** — tokens, model breakdown, cache savings and estimates.
 - **Backups** — create, import, inspect, export, restore and delete archives.
 - **Management** — storage by agent and bulk cleanup.

@@ -20,6 +20,7 @@ import {
 import { AGENT_CLASS, AGENTS, AGENT_ORDER } from "../lib/agents";
 import { platform, trashName } from "../lib/native";
 import { matchesSession, searchTokens, SESSION_SEARCH_PLACEHOLDER } from "../lib/search";
+import { useContentSearch } from "../lib/useContentSearch";
 import { useApp } from "../lib/store";
 import type { AgentId, SessionSummary } from "../lib/types";
 import { bytes, cn, compact, number, relativeTime } from "../lib/utils";
@@ -53,8 +54,10 @@ export default function ManagePage() {
     rescan,
     loading,
     demo,
+    native,
   } = useApp();
   const [query, setQuery] = useState("");
+  const contentSearch = useContentSearch(query, native && !demo);
   const [agent, setAgent] = useState<AgentId | "all">("all");
   const [age, setAge] = useState<AgeFilter>("any");
   const [project, setProject] = useState("all");
@@ -96,7 +99,7 @@ export default function ManagePage() {
           const olderThan = age === "90d" ? 90 : 182;
           if (now - new Date(session.updatedAt).getTime() < olderThan * 86_400_000) return false;
         }
-        return matchesSession(session, tokens);
+        return matchesSession(session, tokens) || contentSearch.hits.has(session.id);
       })
       .sort((a, b) => {
         switch (sort) {
@@ -110,7 +113,7 @@ export default function ManagePage() {
             return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
         }
       });
-  }, [sessions, agent, age, project, query, sort]);
+  }, [sessions, agent, age, project, query, sort, contentSearch.hits]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);

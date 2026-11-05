@@ -1,9 +1,11 @@
 import { AGENT_ORDER, AGENTS, PROJECTS, projectFromSlug } from "./agents";
 import { estimateUsage, modelsForAgent, usageTokens } from "./pricing";
+import { searchMessages } from "./search";
 import type {
   ActivityEvent,
   AgentId,
   BackupRecord,
+  ContentHit,
   DayUsage,
   Message,
   SessionDetail,
@@ -1301,6 +1303,11 @@ function hashId(value: string): number {
 const detailCache = new Map<string, SessionDetail>();
 for (const session of FEATURED) {
   detailCache.set(session.id, session);
+}
+
+/** Searches the sample conversations, which have full transcripts. */
+export function demoContentSearch(query: string): ContentHit[] {
+  return searchMessages(FEATURED, query);
 }
 
 export function demoSessionDetail(id: string): SessionDetail | null {

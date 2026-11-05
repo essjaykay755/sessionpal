@@ -7,6 +7,22 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.4.0] - 2026-11-06
+
+Search what was said, not just session titles.
+
+### Added
+
+- Search finds conversations by what you and the agents wrote, across Claude Code, Codex, Cursor, OpenCode and Antigravity. Every word must appear in the same message, and the last word can be unfinished.
+- Matching sessions show the passage that matched, with the words marked and a count of matching messages.
+- Opening a match scrolls the conversation to that message and marks the words in it.
+- Settings shows how many conversations are searchable and the index size, with a button to rebuild it.
+
+### Changed
+
+- The text index lives in SessionPal's cache folder on this device and updates in the background after each scan, rereading only conversations that changed. Tool output and context added by the agents are not indexed.
+- Manage's search also matches conversation text.
+
 ## [0.3.2] - 2026-11-06
 
 Opening SessionPal no longer rereads your whole library.

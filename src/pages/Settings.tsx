@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowsClockwise,
   ArrowCounterClockwise,
@@ -15,6 +15,7 @@ import {
   HardDrives,
   Info,
   LockSimple,
+  MagnifyingGlass,
   Moon,
   Palette,
   ShieldCheck,
@@ -23,9 +24,15 @@ import {
 } from "@phosphor-icons/react";
 import { AGENTS, AGENT_CLASS, AGENT_ORDER } from "../lib/agents";
 import { APP_INFO, RELEASES, formatReleaseDate, type Release } from "../lib/about";
-import { openFolderPrivacySettings, openUrl, platform } from "../lib/native";
+import {
+  clearSearchIndex,
+  fetchSearchIndexStatus,
+  openFolderPrivacySettings,
+  openUrl,
+  platform,
+} from "../lib/native";
 import { useApp } from "../lib/store";
-import type { AgentId, ExportFormat, ThemeSetting } from "../lib/types";
+import type { AgentId, ExportFormat, SearchIndexStatus, ThemeSetting } from "../lib/types";
 import { bytes, cn, homePath, number, relativeTime } from "../lib/utils";
 import { AgentMark, BrandMark } from "../components/Brand";
 import { PageHeader, PageScroll } from "../components/PageChrome";
@@ -266,6 +273,15 @@ export default function SettingsPage() {
                 Managed by the desktop app. Archives are created only when you ask.
               </p>
             </div>
+
+            <SearchIndexPanel
+              native={native && !demo}
+              onClear={async () => {
+                await clearSearchIndex();
+                notify("Search index cleared", "It is rebuilt from your conversations now.");
+                await rescan();
+              }}
+            />
 
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between px-1">
@@ -807,5 +823,76 @@ function ReleaseEntry({
         </div>
       </details>
     </li>
+  );
+}
+
+/** How much conversation text is searchable, and a way to clear the index. */
+function SearchIndexPanel({ native, onClear }: { native: boolean; onClear: () => Promise<void> }) {
+  const [status, setStatus] = useState<SearchIndexStatus | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const building = status?.building ?? false;
+
+  useEffect(() => {
+    if (!native) return;
+    let stopped = false;
+    let timer = 0;
+    const load = async () => {
+      try {
+        const next = await fetchSearchIndexStatus();
+        if (stopped) return;
+        setStatus(next);
+        if (next.building) timer = window.setTimeout(load, 1500);
+      } catch {
+        // The panel is informational; leave it as it was.
+      }
+    };
+    void load();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [native, clearing]);
+
+  const summary = !native
+    ? "The preview searches its sample conversations."
+    : !status
+      ? "Checking…"
+      : building && status.total > 0
+        ? `Indexing ${number(status.done)} of ${number(status.total)} changed conversations…`
+        : `${number(status.indexedSessions)} conversations · ${bytes(status.sizeBytes)}`;
+
+  return (
+    <div className="mt-3 rounded-[14px] border border-line/[0.075] bg-sunken/40 p-3.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-11 font-medium uppercase tracking-[0.1em] text-faint">
+          <MagnifyingGlass className="h-3 w-3" />
+          Conversation search
+        </span>
+        {native && (
+          <button
+            type="button"
+            disabled={clearing || !status || status.indexedSessions === 0}
+            onClick={async () => {
+              setClearing(true);
+              try {
+                await onClear();
+              } finally {
+                setClearing(false);
+              }
+            }}
+            className="flex h-6 items-center gap-1 rounded-full px-2 text-11 font-medium text-muted transition-colors hover:bg-line/[0.06] hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+          >
+            <ArrowCounterClockwise className="h-3 w-3" /> Rebuild
+          </button>
+        )}
+      </div>
+      <div className="mt-1.5 text-12 font-medium text-fg/80" aria-live="polite">
+        {summary}
+      </div>
+      <p className="mt-1 text-11 leading-relaxed text-faint">
+        What you and the agents wrote is indexed on this device so search can find it. Tool output
+        isn't included, and the index updates after each scan.
+      </p>
+    </div>
   );
 }

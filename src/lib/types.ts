@@ -219,3 +219,23 @@ export interface RestoreResult {
 }
 
 export type RangeKey = "7d" | "30d" | "90d" | "1y";
+
+/** A conversation whose text matched a full-text search. */
+export interface ContentHit {
+  id: string;
+  agent: AgentId;
+  messageId: string;
+  role: string;
+  /** Text around the best match; matches are wrapped in U+0001 … U+0002. */
+  snippet: string;
+  /** Messages in the conversation that match. */
+  matches: number;
+}
+
+export interface SearchIndexStatus {
+  building: boolean;
+  done: number;
+  total: number;
+  indexedSessions: number;
+  sizeBytes: number;
+}

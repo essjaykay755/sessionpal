@@ -30,9 +30,17 @@ import { platform } from "../lib/native";
 import { canEstimateSessionCost, projectKey, projectName, usageTotals } from "../lib/analytics";
 import { usageTokens } from "../lib/pricing";
 import { parseBlocks } from "../lib/markdown";
-import { matchesSession, searchTokens, SESSION_SEARCH_PLACEHOLDER } from "../lib/search";
+import {
+  contentWords,
+  matchesSession,
+  searchTokens,
+  SESSION_SEARCH_PLACEHOLDER,
+  snippetParts,
+  wordStartPattern,
+} from "../lib/search";
+import { useContentSearch } from "../lib/useContentSearch";
 import { useApp } from "../lib/store";
-import type { AgentId, Message, SessionDetail, SessionSummary } from "../lib/types";
+import type { AgentId, ContentHit, Message, SessionDetail, SessionSummary } from "../lib/types";
 import {
   bytes,
   clock,
@@ -108,6 +116,8 @@ function contextLabel(content: string): string {
 
 export default function SessionsPage() {
   const {
+    native,
+    demo,
     sessions,
     loading,
     rescan,
@@ -129,6 +139,9 @@ export default function SessionsPage() {
   } = useApp();
 
   const [query, setQuery] = useState("");
+  const contentSearch = useContentSearch(query, native && !demo);
+  // The message to scroll to when a conversation is opened from a text match.
+  const [jump, setJump] = useState<{ sessionId: string; messageId: string } | null>(null);
   const [sort, setSort] = useState<SortKey>("recent");
   const project = projectFocus;
   const setProject = setProjectFocus;
@@ -186,7 +199,7 @@ export default function SessionsPage() {
     const matches = sessions.filter((session) => {
       if (activeAgent !== "all" && session.agent !== activeAgent) return false;
       if (project !== "all" && projectKey(session) !== project) return false;
-      return matchesSession(session, tokens);
+      return matchesSession(session, tokens) || contentSearch.hits.has(session.id);
     });
     return matches.sort((a, b) => {
       switch (sort) {
@@ -203,7 +216,7 @@ export default function SessionsPage() {
           return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       }
     });
-  }, [sessions, activeAgent, project, query, sort]);
+  }, [sessions, activeAgent, project, query, sort, contentSearch.hits]);
 
   const selected = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -384,9 +397,14 @@ export default function SessionsPage() {
             </div>
 
             <div className="flex items-center justify-between px-1 text-12 text-faint">
-              <span>
+              <span className="min-w-0 truncate" aria-live="polite">
                 {number(filtered.length)} {filtered.length === 1 ? "session" : "sessions"}
                 {filterActive ? " match" : ""}
+                {contentSearch.indexing
+                  ? ` · indexing ${number(contentSearch.indexing.done)} of ${number(contentSearch.indexing.total)}`
+                  : contentSearch.searching
+                    ? " · searching text…"
+                    : ""}
               </span>
               {filterActive && (
                 <button
@@ -442,6 +460,8 @@ export default function SessionsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.12 }}
                   onClick={() => {
+                    const hit = contentSearch.hits.get(session.id);
+                    setJump(hit ? { sessionId: session.id, messageId: hit.messageId } : null);
                     openSession(session.id);
                     setMobileDetail(true);
                   }}
@@ -479,8 +499,12 @@ export default function SessionsPage() {
                             : compact(session.tokens)}
                       </span>
                     </span>
-                    {sessionTitle(session) === `${AGENTS[session.agent].shortName} session` && session.excerpt && !/^(?:[<{]|the following is the codex agent history)/i.test(session.excerpt.trim()) && (
-                      <span className="mt-1 block truncate text-12 text-muted">{session.excerpt}</span>
+                    {contentSearch.hits.has(session.id) ? (
+                      <MatchSnippet hit={contentSearch.hits.get(session.id)!} agent={session.agent} />
+                    ) : (
+                      sessionTitle(session) === `${AGENTS[session.agent].shortName} session` && session.excerpt && !/^(?:[<{]|the following is the codex agent history)/i.test(session.excerpt.trim()) && (
+                        <span className="mt-1 block truncate text-12 text-muted">{session.excerpt}</span>
+                      )
                     )}
                   </span>
                 </motion.button>
@@ -655,7 +679,15 @@ export default function SessionsPage() {
 
               <div ref={transcriptRef} className="min-h-0 flex-1 overflow-y-auto">
                 {tab === "conversation" ? (
-                  <Transcript detail={activeDetail} scrollRoot={transcriptRef} />
+                  <Transcript
+                    detail={activeDetail}
+                    scrollRoot={transcriptRef}
+                    focus={
+                      jump && jump.sessionId === activeDetail.id
+                        ? { messageId: jump.messageId, words: contentWords(query) }
+                        : null
+                    }
+                  />
                 ) : (
                   <DetailsPanel
                     detail={activeDetail}
@@ -721,12 +753,72 @@ function TabButton({
 
 const TRANSCRIPT_BATCH = 120;
 
+/** Where a conversation matched a text search, with the matches marked. */
+function MatchSnippet({ hit, agent }: { hit: ContentHit; agent: AgentId }) {
+  return (
+    <span className="mt-1.5 block rounded-[8px] bg-line/[0.035] px-2 py-1.5 text-12 leading-snug text-muted">
+      <span className="line-clamp-2 break-words">
+        <span className="font-medium text-faint">
+          {hit.role === "user" ? "You" : AGENTS[agent].shortName}:{" "}
+        </span>
+        {snippetParts(hit.snippet).map((part, index) =>
+          part.hit ? (
+            <mark key={index} className="rounded-[3px] bg-copper-500/20 px-0.5 text-fg dark:bg-copper-300/25">
+              {part.text}
+            </mark>
+          ) : (
+            <span key={index}>{part.text}</span>
+          ),
+        )}
+      </span>
+      {hit.matches > 1 && (
+        <span className="mt-0.5 block text-11 text-faint">{number(hit.matches)} matching messages</span>
+      )}
+    </span>
+  );
+}
+
+const MATCH_HIGHLIGHT = "search-match";
+
+/** Marks the searched words inside `root`, where the browser supports it. */
+function highlightWords(root: Element, words: string[]): void {
+  const registry = (globalThis as { CSS?: { highlights?: Map<string, unknown> } }).CSS?.highlights;
+  const HighlightType = (globalThis as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+  if (!registry || !HighlightType) return;
+  const pattern = wordStartPattern(words);
+  if (!pattern) return;
+  const ranges: Range[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    const text = node.data.toLowerCase();
+    if (text.length !== node.data.length) continue;
+    pattern.lastIndex = 0;
+    for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+      const range = document.createRange();
+      const start = match.index + match[1].length;
+      range.setStart(node, start);
+      range.setEnd(node, start + match[2].length);
+      ranges.push(range);
+      if (match[0].length === 0) pattern.lastIndex += 1;
+    }
+  }
+  registry.set(MATCH_HIGHLIGHT, new HighlightType(...ranges));
+}
+
+function clearHighlights(): void {
+  (globalThis as { CSS?: { highlights?: Map<string, unknown> } }).CSS?.highlights?.delete(MATCH_HIGHLIGHT);
+}
+
 function Transcript({
   detail,
   scrollRoot,
+  focus,
 }: {
   detail: SessionDetail;
   scrollRoot: React.RefObject<HTMLDivElement | null>;
+  /** A message to scroll to, with the searched words to mark in it. */
+  focus?: { messageId: string; words: string[] } | null;
 }) {
   // Long sessions can hold thousands of messages. Render them in batches as the
   // reader scrolls instead of mounting everything at once.
@@ -759,6 +851,35 @@ function Transcript({
     [detail.messages, count],
   );
 
+  // Opened from a text match: render up to the matching message, then bring it
+  // into view and mark the words. Runs once per conversation and match.
+  const focused = useRef<string | null>(null);
+  const focusKey = focus ? `${detail.id}\u0000${focus.messageId}` : null;
+  useEffect(() => {
+    if (!focus || !focusKey || focused.current === focusKey) return;
+    const index = detail.messages.findIndex((message) => message.id === focus.messageId);
+    if (index < 0) return;
+    if (index >= count) {
+      setCount(Math.min(total, index + TRANSCRIPT_BATCH));
+      return;
+    }
+    const node = scrollRoot.current?.querySelector(
+      `[data-message-id="${CSS.escape(focus.messageId)}"]`,
+    );
+    if (!node) return;
+    focused.current = focusKey;
+    node.scrollIntoView({ block: "center" });
+    highlightWords(node, focus.words);
+    node.classList.remove("search-focus");
+    void (node as HTMLElement).offsetWidth;
+    node.classList.add("search-focus");
+  }, [focus, focusKey, detail.messages, count, total, scrollRoot]);
+
+  useEffect(() => {
+    if (!focus) clearHighlights();
+  }, [focus]);
+  useEffect(() => clearHighlights, [detail.id]);
+
   const remaining = total - count;
 
   return (
@@ -781,7 +902,9 @@ function Transcript({
             {item.kind === "tools" ? (
               <ToolGroup steps={item.steps} />
             ) : (
-              <MessageBubble message={item.message} detail={detail} />
+              <div data-message-id={item.message.id}>
+                <MessageBubble message={item.message} detail={detail} />
+              </div>
             )}
           </div>
         ))}
