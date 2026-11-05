@@ -21,12 +21,12 @@ jobs:
           - name: macOS Apple Silicon
             os: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             artifact: macos-apple-silicon
           - name: macOS Intel
             os: macos-latest
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             artifact: macos-intel
           - name: Windows x64
             os: windows-latest
@@ -47,6 +47,9 @@ jobs:
           workspaces: src-tauri
       - run: npm ci
       - run: npm run tauri:build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Verify macOS app signature
+        if: runner.os == 'macOS'
+        run: codesign --verify --deep --strict --verbose=2 "src-tauri/target/${{ matrix.target }}/release/bundle/macos/SessionPal.app"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -86,4 +89,4 @@ jobs:
             echo "Release $tag already exists; refusing to replace it."
             exit 1
           fi
-          gh release create "$tag" "${files[@]}" --target "$RELEASE_COMMIT" --title "SessionPal $tag" --notes "Download the installer for your system below. These builds are unsigned; macOS Gatekeeper and Windows SmartScreen may display security warnings. macOS requires version 11 or later."
+          gh release create "$tag" "${files[@]}" --target "$RELEASE_COMMIT" --title "SessionPal $tag" --notes "Download the installer for your system below. Mac builds are ad hoc signed but not notarized; macOS may require approval in System Settings > Privacy & Security. Windows builds are unsigned and may trigger SmartScreen. macOS requires version 11 or later."
