@@ -215,6 +215,37 @@ pub struct RestoreResult {
     pub errors: Vec<String>,
 }
 
+/// How far a scan may look inside the folders sessions ran in.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAccess {
+    /// Read `.git` and `package.json` in project folders at all.
+    pub inspect: bool,
+    /// Privacy-protected folders (macOS Documents, Desktop, …) the user agreed
+    /// to let SessionPal read, as display paths. Others are never touched, so
+    /// a scan cannot trigger a system permission prompt by surprise.
+    #[serde(default)]
+    pub allowed_folders: Vec<String>,
+}
+
+impl ProjectAccess {
+    /// Everything allowed: the behaviour before folder access was asked for.
+    pub fn unrestricted() -> Self {
+        Self { inspect: true, allowed_folders: vec!["*".to_string()] }
+    }
+}
+
+/// A privacy-protected folder that sessions ran in, and whether it can be read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderAccess {
+    pub name: String,
+    pub path: String,
+    pub sessions: u64,
+    /// "granted", "denied", "unavailable", or "unknown" when not checked.
+    pub status: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPaths {

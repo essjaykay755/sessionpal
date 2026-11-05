@@ -4,6 +4,8 @@ import type {
   BackupRecord,
   DeleteResult,
   ExportFormat,
+  FolderAccess,
+  ProjectAccess,
   RestoreResult,
   SessionDetail,
   SessionLocator,
@@ -38,8 +40,26 @@ export async function detectAgents(): Promise<AgentDetection[]> {
   return invoke<AgentDetection[]>("discover_agents");
 }
 
-export async function fetchSessions(): Promise<import("./types").SessionSummary[]> {
-  return invoke<import("./types").SessionSummary[]>("list_sessions");
+export async function fetchSessions(
+  agents: AgentId[],
+  access: ProjectAccess,
+): Promise<import("./types").SessionSummary[]> {
+  return invoke<import("./types").SessionSummary[]>("list_sessions", { agents, access });
+}
+
+/**
+ * The privacy-protected folders these working directories are in. With
+ * `request`, each is opened once, so macOS asks the user if they have not
+ * decided yet. Without it, nothing on disk is read.
+ */
+export async function fetchProjectFolders(cwds: string[], request: boolean): Promise<FolderAccess[]> {
+  return invoke<FolderAccess[]>("project_folders", { cwds, request });
+}
+
+/** Opens System Settings at Privacy & Security → Files and Folders. */
+export async function openFolderPrivacySettings(): Promise<void> {
+  const opener = await import("@tauri-apps/plugin-opener");
+  await opener.openUrl("x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders");
 }
 
 export async function fetchSession(locator: SessionLocator): Promise<SessionDetail> {

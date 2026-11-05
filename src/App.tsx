@@ -4,9 +4,10 @@ import { WarningCircle } from "@phosphor-icons/react";
 import { AppProvider, useApp } from "./lib/store";
 import type { PageId } from "./lib/types";
 import { Sidebar } from "./components/Sidebar";
-import { platform } from "./lib/native";
+import { openFolderPrivacySettings, platform } from "./lib/native";
 import { Topbar } from "./components/Topbar";
 import { ScanFailedState, ScanningState } from "./components/ScanningState";
+import { Onboarding, usePreviewOnboarding } from "./components/Onboarding";
 import { CommandPalette } from "./components/CommandPalette";
 import { DialogHost } from "./components/Dialogs";
 import { Toasts } from "./components/Toasts";
@@ -46,13 +47,24 @@ function Shell() {
     notify,
     sessions,
     scanned,
+    settings,
+    folderAccess,
   } = useApp();
+  // Folders the user allowed that macOS now refuses (revoked in System Settings).
+  const blocked = folderAccess.filter(
+    (folder) =>
+      folder.status === "denied" &&
+      settings.projectAccess.inspect &&
+      settings.projectAccess.allowedFolders.some((path) => path === "*" || path === folder.path),
+  );
+  const [previewSetup, closePreviewSetup] = usePreviewOnboarding();
+  const setup = (native && !settings.onboarded) || previewSetup;
   const noticeShown = useRef(false);
 
   useEffect(() => {
     if (noticeShown.current) return;
     noticeShown.current = true;
-    if (demo && !native) {
+    if (demo && !native && !previewSetup) {
       const key = "sessionpal.preview-notice.v1";
       let seen = false;
       try {
@@ -120,50 +132,90 @@ function Shell() {
   return (
     <div className={`app-stage${native && platform() === "macos" ? " mac-native" : ""}`}>
       <div className="window-shell relative flex overflow-hidden border border-black/[0.09] bg-canvas dark:border-white/[0.08]">
-        <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar />
-          {native && scanned && error && (
-            <div className="mx-6 mb-1 flex shrink-0 items-center justify-between gap-3 rounded-[12px] border border-warning-solid/25 bg-warning-solid/[0.08] px-3 py-2 text-11 text-warning xl:mx-8">
-              <span className="flex min-w-0 items-center gap-2">
-                <WarningCircle className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">
-                  {`Scan failed: ${error}. Showing the last successful scan.`}
-                </span>
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 shrink-0 px-2 text-11"
-                onClick={() => void rescan()}
-              >
-                Retry
-              </Button>
-            </div>
-          )}
-          <main className="relative min-h-0 flex-1">
-            {loading && !scanning && (
-              <motion.div
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: [0, 0.7, 0.9] }}
-                transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-x-0 top-0 z-30 h-[2px] origin-left bg-copper-400"
-              />
-            )}
-            <div
-              key={scanning ? "scanning" : scanFailed ? "scan-failed" : page}
-              className="absolute inset-0"
-            >
-              {scanning ? (
-                <ScanningState />
-              ) : scanFailed ? (
-                <ScanFailedState error={error ?? ""} onRetry={() => void rescan()} />
-              ) : (
-                <Page />
+        {setup ? (
+          <Onboarding onPreviewDone={closePreviewSetup} />
+        ) : (
+          <>
+            <Sidebar />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <Topbar />
+              {native && scanned && error && (
+                <div className="mx-6 mb-1 flex shrink-0 items-center justify-between gap-3 rounded-[12px] border border-warning-solid/25 bg-warning-solid/[0.08] px-3 py-2 text-11 text-warning xl:mx-8">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <WarningCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">
+                      {`Scan failed: ${error}. Showing the last successful scan.`}
+                    </span>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 shrink-0 px-2 text-11"
+                    onClick={() => void rescan()}
+                  >
+                    Retry
+                  </Button>
+                </div>
               )}
+              {native && blocked.length > 0 && (
+                <div className="mx-6 mb-1 flex shrink-0 items-center justify-between gap-3 rounded-[12px] border border-warning-solid/25 bg-warning-solid/[0.08] px-3 py-2 text-11 text-warning xl:mx-8">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <WarningCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">
+                      macOS is blocking {blocked.map((folder) => folder.name).join(", ")}, so
+                      projects there show folder names. Turn SessionPal on in Privacy &amp; Security
+                      → Files and Folders.
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-11"
+                      onClick={() => void openFolderPrivacySettings().catch(() => undefined)}
+                    >
+                      Open System Settings
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-11"
+                      onClick={() => void rescan()}
+                    >
+                      Check again
+                    </Button>
+                  </span>
+                </div>
+              )}
+              <main className="relative min-h-0 flex-1">
+                {loading && !scanning && (
+                  <motion.div
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: [0, 0.7, 0.9] }}
+                    transition={{
+                      duration: 1.6,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="absolute inset-x-0 top-0 z-30 h-[2px] origin-left bg-copper-400"
+                  />
+                )}
+                <div
+                  key={scanning ? "scanning" : scanFailed ? "scan-failed" : page}
+                  className="absolute inset-0"
+                >
+                  {scanning ? (
+                    <ScanningState />
+                  ) : scanFailed ? (
+                    <ScanFailedState error={error ?? ""} onRetry={() => void rescan()} />
+                  ) : (
+                    <Page />
+                  )}
+                </div>
+              </main>
             </div>
-          </main>
-        </div>
+          </>
+        )}
       </div>
       <CommandPalette />
       <DialogHost />

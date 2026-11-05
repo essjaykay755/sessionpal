@@ -138,11 +138,14 @@ pub fn create_backup(
     selected_agents: Vec<AgentId>,
 ) -> Result<BackupRecord, String> {
     let dir = backup_dir(app)?;
+    // The archive index needs only what the transcripts say, so project
+    // folders are not read here (and no permission prompt can appear).
+    let sessions = agents::list_sessions(Some(&selected_agents), &crate::models::ProjectAccess::default());
     create_backup_in(
         &dir,
         name,
         selected_agents,
-        agents::list_sessions(),
+        sessions,
         &paths::existing_roots(),
     )
 }

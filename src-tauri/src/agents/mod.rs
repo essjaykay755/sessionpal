@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::models::{AgentDetection, AgentId, SessionDetail, SessionLocator, SessionSummary};
+use crate::models::{
+    AgentDetection, AgentId, ProjectAccess, SessionDetail, SessionLocator, SessionSummary,
+};
 use crate::paths;
 
 pub mod antigravity;
@@ -60,21 +62,33 @@ pub fn discover() -> Vec<AgentDetection> {
     detections
 }
 
-pub fn list_sessions() -> Vec<SessionSummary> {
+/// Scans the chosen agents (all when `agents` is `None`).
+pub fn list_sessions(agents: Option<&[AgentId]>, access: &ProjectAccess) -> Vec<SessionSummary> {
     let roots = paths::existing_roots();
+    let wanted = |agent: AgentId| agents.map_or(true, |list| list.contains(&agent));
     let mut sessions = Vec::new();
-    sessions.extend(claude::scan(&roots.claude));
-    sessions.extend(codex::scan(&roots.codex));
-    sessions.extend(cursor::scan(&roots.cursor));
-    sessions.extend(opencode::scan(&roots.opencode));
-    sessions.extend(antigravity::scan(&roots.antigravity));
+    if wanted(AgentId::Claude) {
+        sessions.extend(claude::scan(&roots.claude));
+    }
+    if wanted(AgentId::Codex) {
+        sessions.extend(codex::scan(&roots.codex));
+    }
+    if wanted(AgentId::Cursor) {
+        sessions.extend(cursor::scan(&roots.cursor));
+    }
+    if wanted(AgentId::Opencode) {
+        sessions.extend(opencode::scan(&roots.opencode));
+    }
+    if wanted(AgentId::Antigravity) {
+        sessions.extend(antigravity::scan(&roots.antigravity));
+    }
     sessions.sort_by(|a, b| {
         b.updated_at
             .cmp(&a.updated_at)
             .then_with(|| a.title.cmp(&b.title))
     });
     make_ids_unique(&mut sessions);
-    crate::projects::assign_project_roots(&mut sessions);
+    crate::projects::assign_project_roots(&mut sessions, access);
     sessions
 }
 
@@ -139,7 +153,11 @@ pub fn get_session(locator: &SessionLocator) -> Result<SessionDetail, String> {
     detail.summary.id = locator.id.clone();
     // The UI prefers the listing's disambiguated label; this fills the root
     // for callers that only have the detail.
-    crate::projects::assign_project_roots(std::slice::from_mut(&mut detail.summary));
+    // Reads nothing on disk; the UI takes the project fields from the listing.
+    crate::projects::assign_project_roots(
+        std::slice::from_mut(&mut detail.summary),
+        &ProjectAccess::default(),
+    );
     Ok(detail)
 }
 

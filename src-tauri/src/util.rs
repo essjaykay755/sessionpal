@@ -163,14 +163,9 @@ pub fn project_info(cwd: &str, fallback: &str) -> (String, String, String, Strin
             .unwrap_or(fallback)
     };
     let slug = slugify(name);
-    // An explicit project display name takes precedence over the folder name.
-    // Keep the slug and path based on the folder so existing filters remain stable.
-    let label = if cleaned.is_empty() {
-        None
-    } else {
-        display_name(&Path::new(cleaned).join("package.json"))
-    }
-    .unwrap_or_else(|| project_label(&slug));
+    // Parsing never reads the project folder itself; a `displayName` from its
+    // package.json is applied after the scan, only where folder access allows.
+    let label = project_label(&slug);
     let tint = tint_for(&slug);
     let icon = icon_for(&slug);
     (slug, label, tint, icon)
@@ -180,7 +175,7 @@ type ManifestCache = HashMap<PathBuf, (Option<(u64, Option<SystemTime>)>, Option
 
 /// Many sessions share a workspace, so the `displayName` lookup is cached and
 /// only re-read when the manifest's size or modification time changes.
-fn display_name(manifest: &Path) -> Option<String> {
+pub(crate) fn display_name(manifest: &Path) -> Option<String> {
     static CACHE: OnceLock<Mutex<ManifestCache>> = OnceLock::new();
     let stamp = fs::metadata(manifest)
         .ok()

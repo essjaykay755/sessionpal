@@ -28,6 +28,28 @@ library, plus a Tauri 2 desktop build that reads and operates on real local file
   Windows), so they can be put back until it is emptied.
 - **Manage** storage by agent and inspect where everything lives.
 
+## First launch
+
+The desktop app asks before it reads anything:
+
+1. **Find agents.** A quick read-only check lists the agents installed on this
+   computer, with their session counts and storage paths.
+2. **Choose agents.** Agents you switch off are never read. This can be changed
+   later under Settings → Storage → Agents.
+3. **Project folders (macOS only).** To name projects and group worktrees with
+   their repository, SessionPal checks each session's folder for `.git` and
+   `package.json`. If sessions ran inside a folder macOS protects (Documents,
+   Desktop, Downloads, iCloud Drive or an external drive), setup explains this
+   first and only then lets macOS ask. Choose **Allow**. Folders you skip or
+   deny are never touched; their projects use the folder name. To change a
+   decision later, use Settings → Project folders, or System Settings →
+   Privacy & Security → Files and Folders → SessionPal.
+
+During development (`npm run tauri:dev`) macOS attributes these prompts to
+your terminal app rather than SessionPal. Use a built app to see the real
+prompts. The browser preview can show the setup screens at
+`http://localhost:1420/?setup`.
+
 ## Privacy and safety
 
 - Nothing is uploaded. There is no remote API, analytics, crash reporting or

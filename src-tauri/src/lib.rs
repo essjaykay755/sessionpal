@@ -15,7 +15,8 @@ use std::path::PathBuf;
 
 use models::{
     AgentDetection, AgentId, AppPaths, BackupRecord, DeleteResult, ExportBackupResult,
-    ExportResult, RestoreResult, SessionDetail, SessionLocator, SessionSummary,
+    ExportResult, FolderAccess, ProjectAccess, RestoreResult, SessionDetail, SessionLocator,
+    SessionSummary,
 };
 
 fn task_failed(error: impl std::fmt::Display) -> String {
@@ -30,8 +31,23 @@ async fn discover_agents() -> Result<Vec<AgentDetection>, String> {
 }
 
 #[tauri::command]
-async fn list_sessions() -> Result<Vec<SessionSummary>, String> {
-    tauri::async_runtime::spawn_blocking(agents::list_sessions)
+async fn list_sessions(
+    agents: Option<Vec<AgentId>>,
+    access: Option<ProjectAccess>,
+) -> Result<Vec<SessionSummary>, String> {
+    // Older callers sent no options: scan everything, as before.
+    let access = access.unwrap_or_else(ProjectAccess::unrestricted);
+    tauri::async_runtime::spawn_blocking(move || agents::list_sessions(agents.as_deref(), &access))
+        .await
+        .map_err(task_failed)
+}
+
+/// The privacy-protected folders the given working directories live in. With
+/// `request`, each folder is opened once, which makes macOS ask the user for
+/// access if they have not decided yet; otherwise nothing is read.
+#[tauri::command]
+async fn project_folders(cwds: Vec<String>, request: bool) -> Result<Vec<FolderAccess>, String> {
+    tauri::async_runtime::spawn_blocking(move || projects::folder_access(&cwds, request))
         .await
         .map_err(task_failed)
 }
@@ -162,6 +178,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             discover_agents,
             list_sessions,
+            project_folders,
             get_session,
             list_backups,
             create_backup,

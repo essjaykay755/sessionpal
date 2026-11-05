@@ -267,7 +267,7 @@ fn discovers_local_agent_storage() {
             detection.roots.len()
         );
     }
-    let sessions = crate::agents::list_sessions();
+    let sessions = crate::agents::list_sessions(None, &crate::models::ProjectAccess::default());
     println!("listed sessions: {}", sessions.len());
     let expected: u64 = detections
         .iter()
@@ -312,7 +312,17 @@ fn project_display_name_overrides_folder_label_without_changing_slug() {
     write(&workspace.join("package.json"), r#"{"name":"project","displayName":"Project Name"}"#);
     let (slug, label, _, _) = crate::util::project_info(workspace.to_str().unwrap(), "Unknown");
     assert_eq!(slug, "old-folder-name");
-    assert_eq!(label, "Project Name");
+    // Parsing alone never reads the folder.
+    assert_eq!(label, "Old Folder Name");
+
+    let mut sessions = vec![project_session(workspace.to_str().unwrap(), &slug, &label)];
+    crate::projects::assign_project_roots(&mut sessions, &crate::models::ProjectAccess::default());
+    assert_eq!(sessions[0].project_label, "Old Folder Name", "no access, no read");
+    crate::projects::assign_project_roots(&mut sessions, &crate::models::ProjectAccess::unrestricted());
+    assert_eq!(sessions[0].project_label, "Project Name");
+    assert_eq!(sessions[0].project_root_label, "Project Name");
+    assert_eq!(sessions[0].project, "old-folder-name");
+
     let (_, fallback, _, _) = crate::util::project_info("/nonexistent/my-project", "Unknown");
     assert_eq!(fallback, "My Project");
 }
@@ -1069,7 +1079,7 @@ fn project_root_labels_are_disambiguated_and_grouped() {
         project_session(personal.to_str().unwrap(), "api", "Api"),
         project_session("", "codex", "Codex"),
     ];
-    crate::projects::assign_project_roots(&mut sessions);
+    crate::projects::assign_project_roots(&mut sessions, &crate::models::ProjectAccess::unrestricted());
 
     assert_eq!(sessions[0].project_root, sessions[1].project_root);
     assert_eq!(sessions[1].project_root_label, "Api · work");
@@ -1079,4 +1089,63 @@ fn project_root_labels_are_disambiguated_and_grouped() {
     assert_eq!(sessions[1].project, "server");
     assert_eq!(sessions[3].project_root, "");
     assert_eq!(sessions[3].project_root_label, "Codex");
+}
+
+#[test]
+fn protected_folders_are_detected_and_never_read_without_consent() {
+    use crate::models::ProjectAccess;
+    use crate::projects::protected_folder;
+    let home = Path::new("/Users/someone");
+    let docs = Path::new("/Users/someone/Documents/code/app");
+    assert_eq!(
+        protected_folder(docs, Some(home), true).map(|(name, _)| name),
+        Some("Documents".to_string())
+    );
+    assert_eq!(
+        protected_folder(Path::new("/Volumes/Work/repo"), Some(home), true),
+        Some(("Work".to_string(), PathBuf::from("/Volumes/Work")))
+    );
+    assert_eq!(
+        protected_folder(Path::new("/Users/someone/Library/Mobile Documents/x"), Some(home), true)
+            .map(|(name, _)| name),
+        Some("iCloud Drive".to_string())
+    );
+    assert!(protected_folder(Path::new("/Users/someone/code/app"), Some(home), true).is_none());
+    assert!(protected_folder(docs, Some(home), false).is_none(), "only macOS protects folders");
+
+    // A repository inside a folder the user has not allowed stays unread:
+    // its working folder is the root even though a .git exists above it.
+    let temp = TempDir::new().unwrap();
+    let base = fs::canonicalize(temp.path()).unwrap();
+    let repo = base.join("repo");
+    fs::create_dir_all(repo.join(".git")).unwrap();
+    fs::create_dir_all(repo.join("web")).unwrap();
+    let cwd = repo.join("web");
+    let mut sessions = vec![project_session(cwd.to_str().unwrap(), "web", "Web")];
+    crate::projects::assign_project_roots(&mut sessions, &ProjectAccess { inspect: false, allowed_folders: vec![] });
+    assert_eq!(PathBuf::from(&sessions[0].project_root), cwd);
+    crate::projects::assign_project_roots(&mut sessions, &ProjectAccess { inspect: true, allowed_folders: vec![] });
+    assert_eq!(PathBuf::from(&sessions[0].project_root), repo, "unprotected folders need only inspect");
+}
+
+#[test]
+fn folder_access_groups_cwds_without_reading_unless_asked() {
+    let home = dirs::home_dir().unwrap();
+    let cwds = vec![
+        home.join("Documents/a").to_string_lossy().to_string(),
+        "~/Documents/b".to_string(),
+        home.join("Desktop/c").to_string_lossy().to_string(),
+        "/tmp/elsewhere".to_string(),
+        String::new(),
+    ];
+    let folders = crate::projects::folder_access(&cwds, false);
+    if cfg!(target_os = "macos") {
+        assert_eq!(folders.len(), 2);
+        assert_eq!(folders[0].name, "Documents");
+        assert_eq!(folders[0].sessions, 2);
+        assert_eq!(folders[0].path, "~/Documents");
+        assert!(folders.iter().all(|folder| folder.status == "unknown"));
+    } else {
+        assert!(folders.is_empty());
+    }
 }

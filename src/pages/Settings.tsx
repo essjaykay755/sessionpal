@@ -9,6 +9,7 @@ import {
   Copy,
   Database,
   FileText,
+  FolderLock,
   FolderOpen,
   HardDrives,
   Info,
@@ -21,9 +22,9 @@ import {
 } from "@phosphor-icons/react";
 import { AGENTS, AGENT_CLASS, AGENT_ORDER } from "../lib/agents";
 import { APP_INFO, RELEASES, formatReleaseDate, type Release } from "../lib/about";
-import { openUrl, platform } from "../lib/native";
+import { openFolderPrivacySettings, openUrl, platform } from "../lib/native";
 import { useApp } from "../lib/store";
-import type { ExportFormat, ThemeSetting } from "../lib/types";
+import type { AgentId, ExportFormat, ThemeSetting } from "../lib/types";
 import { bytes, cn, homePath, number, relativeTime } from "../lib/utils";
 import { AgentMark, BrandMark } from "../components/Brand";
 import { PageHeader, PageScroll } from "../components/PageChrome";
@@ -55,7 +56,30 @@ export default function SettingsPage() {
     revealLocation,
     copyPath,
     notify,
+    folderAccess,
+    requestFolderAccess,
+    updateScanSettings,
   } = useApp();
+  const enabled = settings.enabledAgents;
+  const toggleAgent = (agent: AgentId, next: boolean) => {
+    const agents = next ? [...enabled, agent] : enabled.filter((id) => id !== agent);
+    void updateScanSettings({ enabledAgents: AGENT_ORDER.filter((id) => agents.includes(id)) });
+  };
+  const access = settings.projectAccess;
+  const isAllowed = (path: string) => access.allowedFolders.some((item) => item === "*" || item === path);
+  const setFolderAllowed = (path: string, allowed: boolean) => {
+    if (allowed) {
+      void requestFolderAccess([path]);
+      return;
+    }
+    // A wildcard from older settings becomes the explicit list minus this one.
+    const current = access.allowedFolders.includes("*")
+      ? folderAccess.map((folder) => folder.path)
+      : access.allowedFolders;
+    void updateScanSettings({
+      projectAccess: { ...access, allowedFolders: current.filter((item) => item !== path) },
+    });
+  };
 
   const totalStorage = useMemo(
     () => sessions.reduce((sum, session) => sum + session.sizeBytes, 0),
@@ -245,16 +269,16 @@ export default function SettingsPage() {
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between px-1">
                 <span className="text-11 font-medium uppercase tracking-[0.1em] text-faint">
-                  Agent sources
+                  Agents
                 </span>
                 <span className="text-11 text-faint">
-                  {activeAgents} of {AGENT_ORDER.length} detected
+                  {enabled.length} included · {activeAgents} of {AGENT_ORDER.length} detected
                 </span>
               </div>
               <div className="divide-y divide-line/[0.055] overflow-hidden rounded-[14px] border border-line/[0.075]">
                 {AGENT_ORDER.map((agent) => {
                   const detection = detections.find((item) => item.id === agent);
-                  const count = sessions.filter((session) => session.agent === agent).length;
+                  const count = detection?.sessionCount ?? sessions.filter((session) => session.agent === agent).length;
                   const size = sessions
                     .filter((session) => session.agent === agent)
                     .reduce((sum, session) => sum + session.sizeBytes, 0);
@@ -286,7 +310,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="hidden shrink-0 text-right sm:block">
                         <div className="text-11 tabular text-muted">{number(count)} sessions</div>
-                        <div className="text-11 tabular text-faint">{bytes(size)}</div>
+                        <div className="text-11 tabular text-faint">{enabled.includes(agent) ? bytes(size) : "Not included"}</div>
                       </div>
                       <button
                         type="button"
@@ -296,6 +320,13 @@ export default function SettingsPage() {
                       >
                         <FolderOpen className="h-3.5 w-3.5" />
                       </button>
+                      <Switch
+                        checked={enabled.includes(agent)}
+                        // Keep at least one agent, or the library would be empty by choice.
+                        disabled={loading || (enabled.length === 1 && enabled.includes(agent))}
+                        onChange={(next) => toggleAgent(agent, next)}
+                        label={`Include ${AGENTS[agent].name}`}
+                      />
                     </div>
                   );
                 })}
@@ -313,6 +344,85 @@ export default function SettingsPage() {
                 <Info className="h-3 w-3" /> Last scan {relativeTime(lastScanAt)}
               </span>
             </div>
+          </section>
+
+          <section id="project-folders" className="card p-5 sm:p-6">
+            <SectionHeading
+              icon={<FolderLock className="h-4 w-4" />}
+              title="Project folders"
+              detail="Used to name projects and group worktrees with their repository."
+            />
+            <div className="mt-4 divide-y divide-line/[0.06]">
+              <SettingRow
+                title="Look inside project folders"
+                detail="Checks each session's folder for .git and package.json. Source files are never read. Off: projects use their folder name."
+                control={
+                  <Switch
+                    checked={access.inspect}
+                    disabled={loading}
+                    onChange={(next) => void updateScanSettings({ projectAccess: { ...access, inspect: next } })}
+                    label="Look inside project folders"
+                  />
+                }
+              />
+            </div>
+            {access.inspect && platform() === "macos" && (
+              <div className="mt-4">
+                <div className="mb-2 px-1 text-11 font-medium uppercase tracking-[0.1em] text-faint">
+                  Folders macOS protects
+                </div>
+                {folderAccess.length === 0 ? (
+                  <p className="rounded-[14px] border border-line/[0.075] px-3 py-3 text-11 text-muted">
+                    {native
+                      ? "None of your sessions ran in Documents, Desktop, Downloads, iCloud Drive or an external drive."
+                      : "The desktop app lists protected folders, such as Documents, that sessions ran in."}
+                  </p>
+                ) : (
+                  <div className="divide-y divide-line/[0.055] overflow-hidden rounded-[14px] border border-line/[0.075]">
+                    {folderAccess.map((folder) => {
+                      const allowed = isAllowed(folder.path);
+                      const denied = allowed && folder.status === "denied";
+                      return (
+                        <div key={folder.path} className="flex items-center gap-2.5 bg-panel px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-11 font-medium text-fg/85">{folder.name}</span>
+                              <span className={cn("h-1.5 w-1.5 rounded-full", denied ? "bg-warning-solid" : allowed ? "bg-success-solid" : "bg-line/20")} />
+                              <span className="text-11 text-faint">
+                                {denied ? "blocked by macOS" : allowed ? "allowed" : "not read"}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 truncate font-mono text-11 text-faint">
+                              {folder.path} · {number(folder.sessions)} sessions
+                            </div>
+                          </div>
+                          {denied && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-11"
+                              onClick={() => void openFolderPrivacySettings().catch(() => undefined)}
+                            >
+                              Open System Settings
+                            </Button>
+                          )}
+                          <Switch
+                            checked={allowed}
+                            disabled={loading}
+                            onChange={(next) => setFolderAllowed(folder.path, next)}
+                            label={`Read project folders in ${folder.name}`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="mt-2 px-1 text-11 leading-relaxed text-faint">
+                  Turning a folder on makes macOS ask once. If you chose Don't Allow before, turn it
+                  on in System Settings → Privacy &amp; Security → Files and Folders → SessionPal.
+                </p>
+              </div>
+            )}
           </section>
 
           <section id="defaults" className="card p-5 sm:p-6">

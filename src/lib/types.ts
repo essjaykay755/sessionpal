@@ -143,7 +143,31 @@ export interface ProjectMeta {
 export type ThemeSetting = "system" | "light" | "dark";
 export type ExportFormat = "markdown" | "json";
 
+/** How far a scan may look inside the folders sessions ran in. */
+export interface ProjectAccess {
+  /** Read `.git` and `package.json` in project folders at all. */
+  inspect: boolean;
+  /**
+   * Privacy-protected folders (macOS Documents, Desktop, …) the user allowed,
+   * as display paths. `"*"` allows every folder (settings from before 0.3).
+   */
+  allowedFolders: string[];
+}
+
+/** A privacy-protected folder sessions ran in, and whether it can be read. */
+export interface FolderAccess {
+  name: string;
+  path: string;
+  sessions: number;
+  status: "granted" | "denied" | "unavailable" | "unknown";
+}
+
 export interface AppSettings {
+  /** False until the first-launch setup has been completed. */
+  onboarded: boolean;
+  /** Agents included in scans. */
+  enabledAgents: AgentId[];
+  projectAccess: ProjectAccess;
   theme: ThemeSetting;
   sidebarExpanded: boolean;
   showCosts: boolean;

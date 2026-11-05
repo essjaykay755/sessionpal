@@ -27,6 +27,7 @@ import {
   exportNativeBackup,
   exportNativeSessions,
   fetchBackups,
+  fetchProjectFolders,
   fetchSession,
   fetchSessions,
   importNativeBackup,
@@ -49,7 +50,9 @@ import type {
   DeleteResult,
   DialogState,
   ExportFormat,
+  FolderAccess,
   PageId,
+  ProjectAccess,
   RestoreResult,
   SessionDetail,
   SessionLocator,
@@ -66,6 +69,9 @@ const LEGACY_SETTINGS_KEY = "sessionden.settings.v1";
 
 function defaultSettings(): AppSettings {
   return {
+    onboarded: false,
+    enabledAgents: [...AGENT_ORDER],
+    projectAccess: { inspect: true, allowedFolders: [] },
     theme: "light",
     sidebarExpanded: true,
     showCosts: true,
@@ -85,11 +91,21 @@ function readSettings(): AppSettings {
     const raw = localStorage.getItem(SETTINGS_KEY) ?? localStorage.getItem(LEGACY_SETTINGS_KEY);
     if (!raw) return defaultSettings();
     const defaults = defaultSettings();
+    const saved = JSON.parse(raw) as Partial<AppSettings>;
+    // Settings saved before first-launch setup existed belong to someone who
+    // already used the app, which scanned everything and read project folders.
+    if (saved.onboarded === undefined) {
+      saved.onboarded = true;
+      saved.projectAccess ??= { inspect: true, allowedFolders: ["*"] };
+    }
     // The backup folder is derived from the platform (and the native app), never
     // from storage, so a path saved by an older build can't linger.
     return {
       ...defaults,
-      ...(JSON.parse(raw) as Partial<AppSettings>),
+      ...saved,
+      enabledAgents: (saved.enabledAgents ?? defaults.enabledAgents).filter((agent) =>
+        AGENT_ORDER.includes(agent),
+      ),
       backupFolder: defaults.backupFolder,
     };
   } catch {
@@ -135,6 +151,13 @@ interface AppContextValue {
   selectedSessionId: string | null;
   agentFocus: AgentId | "all";
   focusAgent: (agent: AgentId | "all") => void;
+  /** Protected folders (macOS) that sessions ran in, with access status. */
+  folderAccess: FolderAccess[];
+  requestFolderAccess: (paths: string[]) => Promise<FolderAccess[]>;
+  completeOnboarding: (choice: { agents: AgentId[]; access: ProjectAccess }) => Promise<void>;
+  updateScanSettings: (
+    patch: Partial<Pick<AppSettings, "enabledAgents" | "projectAccess">>,
+  ) => Promise<void>;
   /** A `projectKey`, or "all". */
   projectFocus: string;
   setProjectFocus: (project: string) => void;
@@ -195,7 +218,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const demo = !isTauri;
   const demoReason: string | null = null;
-  const [loading, setLoading] = useState(isTauri);
+  // The first scan waits for first-launch setup, so it starts only when done.
+  const [loading, setLoading] = useState(() => isTauri && readSettings().onboarded);
   const [error, setError] = useState<string | null>(null);
   const [scanned, setScanned] = useState(false);
   const [lastScanAt, setLastScanAt] = useState(new Date(Date.now() - 4 * 60_000).toISOString());
@@ -212,6 +236,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     typeof window !== "undefined" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
+  const [folderAccess, setFolderAccess] = useState<FolderAccess[]>([]);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const booted = useRef(false);
   const hasLocalScan = useRef(false);
   const toastTimers = useRef<Record<string, number>>({});
@@ -294,15 +321,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCommandOpen(false);
   }, []);
 
+  /**
+   * Lists the protected folders sessions ran in, and re-checks the ones the
+   * user allowed (no prompt appears for an answered request), so access
+   * revoked in System Settings shows up as "denied".
+   */
+  const refreshFolderAccess = useCallback(
+    async (list: SessionSummary[], access: ProjectAccess) => {
+      if (!isTauri || platform() !== "macos") return;
+      try {
+        const cwds = list.map((session) => session.cwd);
+        const folders = await fetchProjectFolders(cwds, false);
+        const allowed = (folder: FolderAccess) =>
+          access.inspect &&
+          access.allowedFolders.some((path) => path === "*" || path === folder.path);
+        const probeCwds = cwds.filter((cwd) =>
+          folders.some((folder) => allowed(folder) && isInside(cwd, folder.path)),
+        );
+        const probed = probeCwds.length ? await fetchProjectFolders(probeCwds, true) : [];
+        setFolderAccess(
+          folders.map((folder) => ({
+            ...folder,
+            status: probed.find((item) => item.path === folder.path)?.status ?? "unknown",
+          })),
+        );
+      } catch {
+        // Folder status is advisory; a failure here must not fail the scan.
+      }
+    },
+    [],
+  );
+
   const loadNative = useCallback(
-    async () => {
+    async (scope?: { agents: AgentId[]; access: ProjectAccess }) => {
       if (!isTauri) return null;
+      const agents = scope?.agents ?? settingsRef.current.enabledAgents;
+      const access = scope?.access ?? settingsRef.current.projectAccess;
       setLoading(true);
       setError(null);
       try {
         const [nextDetections, nextSessions, nextBackups, paths] = await Promise.all([
           detectAgents(),
-          fetchSessions(),
+          fetchSessions(agents, access),
           fetchBackups().catch(() => []),
           appPaths().catch(() => null),
         ]);
@@ -314,6 +374,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (paths?.backupDir) {
           setSettings((current) => ({ ...current, backupFolder: paths.backupDir }));
         }
+        void refreshFolderAccess(nextSessions, access);
         hasLocalScan.current = true;
         setScanned(true);
         setLastScanAt(new Date().toISOString());
@@ -335,16 +396,63 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [notify],
+    [notify, refreshFolderAccess],
   );
 
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    if (isTauri) {
+    if (isTauri && settingsRef.current.onboarded) {
       void loadNative();
     }
   }, [loadNative]);
+
+  const completeOnboarding = useCallback(
+    async (choice: { agents: AgentId[]; access: ProjectAccess }) => {
+      const next = { ...settingsRef.current, onboarded: true, enabledAgents: choice.agents, projectAccess: choice.access };
+      settingsRef.current = next;
+      setSettings(next);
+      await loadNative(choice);
+    },
+    [loadNative],
+  );
+
+  /** Changes which agents and folders scans cover, then rescans. */
+  const updateScanSettings = useCallback(
+    async (patch: Partial<Pick<AppSettings, "enabledAgents" | "projectAccess">>) => {
+      const next = { ...settingsRef.current, ...patch };
+      settingsRef.current = next;
+      setSettings(next);
+      if (isTauri) await loadNative();
+    },
+    [loadNative],
+  );
+
+  /**
+   * Opens each protected folder once so macOS asks for access, then records
+   * the folders that were granted. Returns the folders with their status.
+   */
+  const requestFolderAccess = useCallback(
+    async (paths: string[]) => {
+      const cwds = sessions.map((session) => session.cwd).filter((cwd) => paths.some((path) => isInside(cwd, path)));
+      const result = cwds.length ? await fetchProjectFolders(cwds, true) : [];
+      const granted = result.filter((folder) => folder.status === "granted").map((folder) => folder.path);
+      const current = settingsRef.current.projectAccess;
+      const access: ProjectAccess = {
+        inspect: true,
+        allowedFolders: Array.from(new Set([...current.allowedFolders, ...granted])),
+      };
+      const next = { ...settingsRef.current, projectAccess: access };
+      settingsRef.current = next;
+      setSettings(next);
+      setFolderAccess((folders) =>
+        folders.map((folder) => result.find((item) => item.path === folder.path) ?? folder),
+      );
+      if (granted.length) await loadNative();
+      return result;
+    },
+    [sessions, loadNative],
+  );
 
   useEffect(() => {
     if (selectedSessionId) return;
@@ -824,11 +932,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify],
   );
 
+  // The preview has a fixed sample library, so agent choices filter it here;
+  // the desktop app simply doesn't scan agents that are switched off.
+  const visibleSessions = useMemo(
+    () => (demo ? sessions.filter((session) => settings.enabledAgents.includes(session.agent)) : sessions),
+    [demo, sessions, settings.enabledAgents],
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       page,
       navigate,
-      sessions,
+      sessions: visibleSessions,
       native: isTauri,
       demo,
       demoReason,
@@ -842,6 +957,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectedSessionId,
       agentFocus,
       focusAgent,
+      folderAccess,
+      requestFolderAccess,
+      completeOnboarding,
+      updateScanSettings,
       projectFocus,
       setProjectFocus,
       focusProject,
@@ -878,7 +997,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       page,
       navigate,
-      sessions,
+      visibleSessions,
       demo,
       demoReason,
       loading,
@@ -891,6 +1010,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectedSessionId,
       agentFocus,
       focusAgent,
+      folderAccess,
+      requestFolderAccess,
+      completeOnboarding,
+      updateScanSettings,
       projectFocus,
       setProjectFocus,
       focusProject,
@@ -941,4 +1064,10 @@ export function useCostsVisible(): boolean {
 export function costLabel(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   return `≈ ${money(value)}`;
+}
+
+/** True when a session's working folder is `folder` or inside it. */
+export function isInside(cwd: string, folder: string): boolean {
+  const clean = cwd.replace(/[\\/]+$/, "");
+  return clean === folder || clean.startsWith(`${folder}/`) || clean.startsWith(`${folder}\\`);
 }

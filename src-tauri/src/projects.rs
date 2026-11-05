@@ -9,23 +9,33 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::models::SessionSummary;
-use crate::util::{display_path, project_info};
+use crate::models::{FolderAccess, ProjectAccess, SessionSummary};
+use crate::util::{display_name, display_path, project_info};
 
-/// Fills `project_root` and `project_root_label` for every session.
-pub fn assign_project_roots(sessions: &mut [SessionSummary]) {
+/// Fills `project_root` and `project_root_label` for every session, and the
+/// `package.json` display name where folder access allows reading it.
+pub fn assign_project_roots(sessions: &mut [SessionSummary], access: &ProjectAccess) {
     let home = dirs::home_dir();
-    let mut roots: HashMap<String, Option<PathBuf>> = HashMap::new();
+    let mut roots: HashMap<String, Option<(PathBuf, bool)>> = HashMap::new();
     for session in sessions.iter_mut() {
         let root = roots
             .entry(session.cwd.clone())
-            .or_insert_with(|| resolve_root(&session.cwd, home.as_deref()))
+            .or_insert_with(|| resolve_root(&session.cwd, home.as_deref(), access))
             .clone();
         match root {
-            Some(root) => {
+            Some((root, readable)) => {
+                if readable {
+                    let cwd = expand_home(session.cwd.trim(), home.as_deref());
+                    if let Some(name) = display_name(&cwd.join("package.json")) {
+                        session.project_label = name;
+                    }
+                }
                 session.project_root = display_path(&root);
-                let (_, label, _, _) = project_info(&root.to_string_lossy(), &session.project_label);
-                session.project_root_label = label;
+                let (_, folder_label, _, _) = project_info(&root.to_string_lossy(), &session.project_label);
+                session.project_root_label = readable
+                    .then(|| display_name(&root.join("package.json")))
+                    .flatten()
+                    .unwrap_or(folder_label);
             }
             None => {
                 // No usable path: group by the folder-name slug, as before.
@@ -37,17 +47,100 @@ pub fn assign_project_roots(sessions: &mut [SessionSummary]) {
     disambiguate_labels(sessions);
 }
 
-/// The repository (or folder) a working directory belongs to.
-fn resolve_root(cwd: &str, home: Option<&Path>) -> Option<PathBuf> {
+/// The repository (or folder) a working directory belongs to, and whether
+/// its folders may be read. Without access, the folder itself is the root.
+fn resolve_root(cwd: &str, home: Option<&Path>, access: &ProjectAccess) -> Option<(PathBuf, bool)> {
     let cleaned = cwd.trim().trim_end_matches(['/', '\\']);
     if cleaned.is_empty() {
         return None;
     }
     let path = expand_home(cleaned, home);
-    if !path.is_absolute() {
-        return Some(path);
+    if !path.is_absolute() || !may_read(&path, home, access) {
+        return Some((path, false));
     }
-    Some(git_root(&path, home).unwrap_or(path))
+    Some((git_root(&path, home).unwrap_or_else(|| path.clone()), true))
+}
+
+fn may_read(path: &Path, home: Option<&Path>, access: &ProjectAccess) -> bool {
+    if !access.inspect {
+        return false;
+    }
+    match protected_folder(path, home, cfg!(target_os = "macos")) {
+        None => true,
+        Some((_, root)) => {
+            let root = display_path(&root);
+            access.allowed_folders.iter().any(|allowed| allowed == "*" || *allowed == root)
+        }
+    }
+}
+
+/// The macOS privacy-protected folder `path` is inside, if any: reading
+/// these needs the user's permission, so they are only read once allowed.
+pub(crate) fn protected_folder(path: &Path, home: Option<&Path>, macos: bool) -> Option<(String, PathBuf)> {
+    if !macos {
+        return None;
+    }
+    if let Some(home) = home {
+        let folders = [
+            ("Documents", home.join("Documents")),
+            ("Desktop", home.join("Desktop")),
+            ("Downloads", home.join("Downloads")),
+            ("iCloud Drive", home.join("Library").join("Mobile Documents")),
+        ];
+        for (name, root) in folders {
+            if path.starts_with(&root) {
+                return Some((name.to_string(), root));
+            }
+        }
+    }
+    // External and network volumes are protected as well.
+    let mut parts = path.components();
+    parts.next()?;
+    if parts.next()?.as_os_str() == "Volumes" {
+        let volume = parts.next()?.as_os_str().to_string_lossy().to_string();
+        let root = Path::new("/Volumes").join(&volume);
+        return Some((volume, root));
+    }
+    None
+}
+
+/// Groups working directories by protected folder. With `request`, each
+/// folder is opened once: macOS then asks the user if they have not decided,
+/// and the result says whether access was granted.
+pub fn folder_access(cwds: &[String], request: bool) -> Vec<FolderAccess> {
+    let home = dirs::home_dir();
+    let mut folders: Vec<FolderAccess> = Vec::new();
+    for cwd in cwds {
+        let cleaned = cwd.trim().trim_end_matches(['/', '\\']);
+        if cleaned.is_empty() {
+            continue;
+        }
+        let path = expand_home(cleaned, home.as_deref());
+        let Some((name, root)) = protected_folder(&path, home.as_deref(), cfg!(target_os = "macos")) else {
+            continue;
+        };
+        let shown = display_path(&root);
+        match folders.iter_mut().find(|folder| folder.path == shown) {
+            Some(folder) => folder.sessions += 1,
+            None => folders.push(FolderAccess {
+                name,
+                path: shown,
+                sessions: 1,
+                status: if request { probe(&root) } else { "unknown".to_string() },
+            }),
+        }
+    }
+    folders.sort_by(|a, b| b.sessions.cmp(&a.sessions).then_with(|| a.name.cmp(&b.name)));
+    folders
+}
+
+fn probe(root: &Path) -> String {
+    match fs::read_dir(root) {
+        Ok(_) => "granted",
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => "denied",
+        Err(_) => "unavailable",
+    }
+    .to_string()
 }
 
 fn expand_home(path: &str, home: Option<&Path>) -> PathBuf {

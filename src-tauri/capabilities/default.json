@@ -14,7 +14,10 @@
     "opener:allow-open-path",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://*" }]
+      "allow": [
+        { "url": "https://*" },
+        { "url": "x-apple.systempreferences:*" }
+      ]
     },
     "opener:allow-reveal-item-in-dir"
   ]
