@@ -13,6 +13,7 @@ export const APP_INFO = {
   developerUrl: "https://essjaykay.dev",
   websiteUrl: "https://sessionpal.app",
   repositoryUrl: "https://github.com/essjaykay755/sessionpal",
+  supportUrl: "https://buymeacoffee.com/essjaykay",
   license: "MIT",
   copyrightYear: 2026,
 } as const;

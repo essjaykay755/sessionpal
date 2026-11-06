@@ -26,6 +26,7 @@ import { cn, number } from "../lib/utils";
 import { AgentMark, BrandMark } from "./Brand";
 import { Button, Switch } from "./ui";
 import { WindowsWindowControls } from "./WindowsWindowControls";
+import { ThemeToggle } from "./ThemeToggle";
 
 type Step = "welcome" | "detecting" | "agents" | "reading" | "folders" | "finishing";
 
@@ -139,7 +140,8 @@ export function Onboarding({ onPreviewDone }: { onPreviewDone?: () => void }) {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-canvas">
-      <div data-tauri-drag-region className="flex h-12 shrink-0 justify-end">
+      <div data-tauri-drag-region className={cn("flex h-12 shrink-0 items-center justify-end", !(isTauri && platform() === "windows") && "pr-3")}>
+        <ThemeToggle />
         {isTauri && platform() === "windows" && <WindowsWindowControls />}
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-[560px] flex-1 flex-col px-6 pt-[clamp(24px,7vh,64px)]">

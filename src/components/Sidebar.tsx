@@ -107,7 +107,7 @@ export function Sidebar() {
       className="relative z-30 flex h-full shrink-0 select-none flex-col overflow-hidden bg-[var(--rail)] text-[#f6efe4]"
     >
       {/* macOS needs room for its traffic lights; Windows has controls on the right. */}
-      <div data-tauri-drag-region className={cn("shrink-0", native && platform() === "windows" ? "h-3" : "h-[46px]")} />
+      <div data-tauri-drag-region className={cn("shrink-0", native && platform() === "windows" ? "h-5" : "h-[46px]")} />
 
       <div className={cn("flex items-center gap-2 pb-4", expanded ? "px-4" : "flex-col px-0")}>
         <button

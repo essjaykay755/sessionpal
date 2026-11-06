@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import {
   MagnifyingGlass,
-  Moon,
+  Coffee,
+  GithubLogo,
+  Globe,
   SidebarSimple,
-  Sun,
 } from "@phosphor-icons/react";
+import { APP_INFO } from "../lib/about";
 import { useApp } from "../lib/store";
-import { platform } from "../lib/native";
+import { openUrl, platform } from "../lib/native";
 import type { PageId } from "../lib/types";
 import { cn } from "../lib/utils";
 import { IconButton, Kbd, Tooltip } from "./ui";
 import { WindowsWindowControls } from "./WindowsWindowControls";
+import { ThemeToggle } from "./ThemeToggle";
 
 const PAGE_META: Record<PageId, string> = {
   overview: "Overview",
@@ -25,8 +28,6 @@ export function Topbar() {
   const {
     page,
     setCommandOpen,
-    effectiveTheme,
-    toggleTheme,
     demo,
     native,
     loading,
@@ -118,18 +119,10 @@ export function Topbar() {
           </Tooltip>
         )}
 
-        <IconButton
-          icon={
-            effectiveTheme === "dark" ? (
-              <Sun className="h-[17px] w-[17px]" />
-            ) : (
-              <Moon className="h-[17px] w-[17px]" />
-            )
-          }
-          label={effectiveTheme === "dark" ? "Switch to light appearance" : "Switch to dark appearance"}
-          onClick={toggleTheme}
-          tooltipSide="bottom"
-        />
+        <IconButton icon={<GithubLogo className="h-[17px] w-[17px]" />} label="Open SessionPal on GitHub" onClick={() => void openUrl(APP_INFO.repositoryUrl)} tooltipSide="bottom" />
+        <IconButton icon={<Globe className="h-[17px] w-[17px]" />} label="Open SessionPal website" onClick={() => void openUrl(APP_INFO.websiteUrl)} tooltipSide="bottom" />
+        <IconButton icon={<Coffee className="h-[17px] w-[17px]" />} label="Buy me a coffee" onClick={() => void openUrl(APP_INFO.supportUrl)} tooltipSide="bottom" />
+        <ThemeToggle />
         {windowsChrome && <WindowsWindowControls />}
       </div>
     </header>

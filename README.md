@@ -242,6 +242,10 @@ Set the full private key contents as the GitHub Actions secret `TAURI_SIGNING_PR
 See [CHANGELOG.md](CHANGELOG.md). The app shows the same history under
 Settings → About.
 
+## Support
+
+If you enjoy SessionPal, you can [buy me a coffee](https://buymeacoffee.com/essjaykay).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

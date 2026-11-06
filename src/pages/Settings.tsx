@@ -6,6 +6,7 @@ import {
   CaretRight,
   Check,
   CloudSlash,
+  Coffee,
   Copy,
   Database,
   FileText,
@@ -772,6 +773,16 @@ function AboutSection({
               ))}
             </div>
           )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-3 w-full"
+            icon={<Coffee className="h-4 w-4" />}
+            onClick={() => void openUrl(APP_INFO.supportUrl)}
+          >
+            Buy me a coffee
+          </Button>
 
           <Button
             variant="ghost"

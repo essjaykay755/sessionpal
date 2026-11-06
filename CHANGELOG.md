@@ -7,6 +7,17 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.5.2] - 2026-11-06
+
+### Added
+
+- Added GitHub, website and Buy Me a Coffee links to the title bar, plus a support link in About and the README.
+- Added a light and dark appearance switch to first-run setup.
+
+### Changed
+
+- Gave the Windows sidebar a little more space above the logo and navigation.
+
 ## [0.5.1] - 2026-11-06
 
 ### Changed
