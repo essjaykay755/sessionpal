@@ -85,7 +85,7 @@ export function Topbar() {
         </span>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2 self-stretch">
         <button
           type="button"
           onClick={() => setCommandOpen(true)}

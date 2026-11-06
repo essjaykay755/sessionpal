@@ -12,6 +12,7 @@ import {
   type IconProps,
 } from "@phosphor-icons/react";
 import { useApp } from "../lib/store";
+import { APP_INFO } from "../lib/about";
 import { useUpdates } from "../lib/updates";
 import { platform } from "../lib/native";
 import type { PageId } from "../lib/types";
@@ -119,7 +120,10 @@ export function Sidebar() {
         >
           <BrandMark className="h-[19px] w-[19px]" />
           {expanded && (
-            <span className="text-14 font-bold tracking-[-0.03em] text-[#f6efe4]">SessionPal</span>
+            <span className="flex items-baseline gap-2">
+              <span className="text-14 font-bold tracking-[-0.03em] text-[#f6efe4]">SessionPal</span>
+              <span className="text-11 font-medium tabular text-white/45">v{APP_INFO.version}</span>
+            </span>
           )}
         </button>
       </div>

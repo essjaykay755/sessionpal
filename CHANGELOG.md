@@ -7,6 +7,17 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.5.3] - 2026-11-07
+
+### Changed
+
+- Show the app version beside the SessionPal name in the expanded sidebar.
+- Extend the Windows window controls to fill the title bar height.
+
+### Fixed
+
+- Reveal detected agent paths that start with `~` in Finder or Explorer.
+
 ## [0.5.2] - 2026-11-06
 
 ### Added

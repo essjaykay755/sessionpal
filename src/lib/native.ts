@@ -188,7 +188,14 @@ export async function openFileDialog(options: {
 export async function revealPath(path: string): Promise<void> {
   if (!isTauri) throw new Error("Reveal is only available in the desktop app.");
   const opener = await import("@tauri-apps/plugin-opener");
-  await opener.revealItemInDir(path);
+  // Detection paths are abbreviated for display; the opener requires an absolute path.
+  let target = path;
+  if (path === "~" || path.startsWith("~/") || path.startsWith("~\\")) {
+    const { homeDir, join } = await import("@tauri-apps/api/path");
+    const home = await homeDir();
+    target = path.length === 1 ? home : await join(home, path.slice(2));
+  }
+  await opener.revealItemInDir(target);
 }
 
 export async function openPath(path: string): Promise<void> {
