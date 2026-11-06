@@ -121,6 +121,7 @@ export default function SessionsPage() {
     sessions,
     loading,
     rescan,
+    lastScanAt,
     agentFocus,
     projectFocus,
     setProjectFocus,
@@ -149,7 +150,7 @@ export default function SessionsPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
   const [tab, setTab] = useState<"conversation" | "details">("conversation");
-  const lastRequested = useRef<string | null>(null);
+  const lastRequested = useRef<{ id: string; scan: string } | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const activeAgent = agentFocus;
@@ -163,11 +164,14 @@ export default function SessionsPage() {
   }, [selectedSessionId]);
 
   useEffect(() => {
-    if (!selectedSessionId) return;
-    if (lastRequested.current === selectedSessionId) return;
-    lastRequested.current = selectedSessionId;
+    if (!selectedSessionId) {
+      lastRequested.current = null;
+      return;
+    }
+    if (lastRequested.current?.id === selectedSessionId && lastRequested.current.scan === lastScanAt) return;
+    lastRequested.current = { id: selectedSessionId, scan: lastScanAt };
     openSession(selectedSessionId);
-  }, [openSession, selectedSessionId]);
+  }, [openSession, selectedSessionId, lastScanAt]);
 
   useEffect(() => {
     if (!focusMode) return;

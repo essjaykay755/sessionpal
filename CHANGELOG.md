@@ -13,8 +13,9 @@ Search what was said, not just session titles.
 
 ### Added
 
-- Search finds conversations by what you and the agents wrote, across Claude Code, Codex, Cursor, OpenCode and Antigravity. Every word must appear in the same message, and the last word can be unfinished.
+- Search finds conversations by what you and the agents wrote, across Claude Code, Codex, Cursor, OpenCode and Antigravity. Every word must appear in the same message; words match the start of a word, so unfinished words work, while a single letter matches only itself.
 - Matching sessions show the passage that matched, with the words marked and a count of matching messages.
+- Results include every matching conversation and refresh on their own while the index is built or after a rescan.
 - Opening a match scrolls the conversation to that message and marks the words in it.
 - Settings shows how many conversations are searchable and the index size, with a button to rebuild it.
 

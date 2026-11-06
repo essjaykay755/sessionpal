@@ -71,17 +71,31 @@ function escapeRegExp(text: string): string {
 export function wordStartPattern(words: string[]): RegExp | null {
   const lower = words.map((word) => word.toLowerCase()).filter(Boolean);
   if (lower.length === 0) return null;
-  return new RegExp(`(^|[^\\p{L}\\p{N}])((?:${lower.map(escapeRegExp).join("|")})[\\p{L}\\p{N}]*)`, "gu");
+  // A single character matches only itself, as in search.
+  const prefixes = lower.filter((word) => [...word].length > 1).map(escapeRegExp);
+  const singles = lower.filter((word) => [...word].length === 1).map(escapeRegExp);
+  const choices = [
+    ...(prefixes.length ? [`(?:${prefixes.join("|")})[\\p{L}\\p{N}]*`] : []),
+    ...(singles.length ? [`(?:${singles.join("|")})(?![\\p{L}\\p{N}])`] : []),
+  ];
+  return new RegExp(`(^|[^\\p{L}\\p{N}])(${choices.join("|")})`, "gu");
 }
 
 /**
  * The browser preview has no native index, so its sample conversations are
  * searched here with the same rules: every word, as a word prefix, in one message.
  */
-export function searchMessages(details: SessionDetail[], query: string, limit = 200): ContentHit[] {
+export function searchMessages(details: SessionDetail[], query: string): ContentHit[] {
   const words = contentWords(query).map(fold);
   if (words.length === 0) return [];
-  const starts = words.map((word) => new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRegExp(word)}`, "u"));
+  // A single character matches only itself, as in the native index.
+  const starts = words.map(
+    (word) =>
+      new RegExp(
+        `(?:^|[^\\p{L}\\p{N}])${escapeRegExp(word)}${[...word].length > 1 ? "" : "(?![\\p{L}\\p{N}])"}`,
+        "u",
+      ),
+  );
   const hits: ContentHit[] = [];
   for (const detail of details) {
     let best: ContentHit | null = null;
@@ -104,14 +118,16 @@ export function searchMessages(details: SessionDetail[], query: string, limit = 
     }
     if (best) hits.push(best);
   }
-  return hits.slice(0, limit);
+  return hits;
 }
 
 function makeSnippet(content: string, words: string[]): string {
   const tokens = content.split(/\s+/).filter(Boolean);
   const isHit = (token: string) => {
     const folded = fold(token).replace(/^[^\p{L}\p{N}]+/u, "");
-    return words.some((word) => folded.startsWith(word));
+    return words.some((word) =>
+      [...word].length > 1 ? folded.startsWith(word) : folded.replace(/[^\p{L}\p{N}]+$/u, "") === word,
+    );
   };
   const first = Math.max(0, tokens.findIndex(isHit));
   const start = Math.max(0, first - 6);

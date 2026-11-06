@@ -1245,7 +1245,7 @@ fn searches_conversation_text_and_keeps_the_index_current() {
     search::sync_with(&index, &[first.clone(), second.clone()], &load);
     assert_eq!(loads.get(), 2);
 
-    let hits = search::search_in(&index, "websocket", 10).unwrap();
+    let hits = search::search_in(&index, "websocket", Some(10)).unwrap();
     assert_eq!(hits.len(), 1, "tool output and injected context are not indexed");
     assert_eq!(hits[0].id, "s1");
     assert_eq!(hits[0].message_id, "m1");
@@ -1253,21 +1253,92 @@ fn searches_conversation_text_and_keeps_the_index_current() {
     assert!(hits[0].snippet.contains("\u{1}WebSocket\u{2}"));
 
     // Prefixes and accents match; every word must be in the same message.
-    assert_eq!(search::search_in(&index, "handsh backoff", 10).unwrap()[0].message_id, "m2");
-    assert_eq!(search::search_in(&index, "cafe", 10).unwrap()[0].agent, AgentId::Codex);
-    assert!(search::search_in(&index, "websocket backoff", 10).unwrap().is_empty());
-    assert!(search::search_in(&index, "  \"* ", 10).unwrap().is_empty());
+    assert_eq!(search::search_in(&index, "handsh backoff", Some(10)).unwrap()[0].message_id, "m2");
+    assert_eq!(search::search_in(&index, "cafe", Some(10)).unwrap()[0].agent, AgentId::Codex);
+    assert!(search::search_in(&index, "websocket backoff", Some(10)).unwrap().is_empty());
+    assert!(search::search_in(&index, "  \"* ", Some(10)).unwrap().is_empty());
+    // A single character matches only that word, not every word it starts.
+    assert_eq!(search::fts_query("i backo").as_deref(), Some("\"i\" AND \"backo\"*"));
+    assert!(search::search_in(&index, "w", Some(10)).unwrap().is_empty());
 
     // Unchanged conversations are not read again; removed ones leave the index.
     search::sync_with(&index, &[first.clone()], &load);
     assert_eq!(loads.get(), 2);
-    assert!(search::search_in(&index, "cafe", 10).unwrap().is_empty());
+    assert!(search::search_in(&index, "cafe", Some(10)).unwrap().is_empty());
 
     // A changed conversation is re-read and its old text replaced.
     first.updated_at = "2026-11-03T10:00:00Z".into();
     let reload = |_: &crate::models::SessionSummary| Ok(vec![text_message("m9", "user", "Totally new topic")]);
     search::sync_with(&index, &[first], &reload);
-    assert!(search::search_in(&index, "websocket", 10).unwrap().is_empty());
-    assert_eq!(search::search_in(&index, "topic", 10).unwrap()[0].message_id, "m9");
+    assert!(search::search_in(&index, "websocket", Some(10)).unwrap().is_empty());
+    assert_eq!(search::search_in(&index, "topic", Some(10)).unwrap()[0].message_id, "m9");
 }
 
+
+#[test]
+fn search_keeps_indexed_text_when_a_conversation_cannot_be_read() {
+    use crate::search;
+    use std::cell::Cell;
+
+    let index = search::memory_index();
+    let mut session = project_session("/tmp/a", "alpha", "Alpha");
+    session.id = "s1".into();
+    session.updated_at = "2026-11-01T10:00:00Z".into();
+    let ok = |_: &crate::models::SessionSummary| Ok(vec![text_message("m1", "user", "Original gimbal notes")]);
+    search::sync_with(&index, &[session.clone()], &ok);
+
+    // The conversation changes but cannot be read right now: the old text stays.
+    session.updated_at = "2026-11-02T10:00:00Z".into();
+    let failures = Cell::new(0);
+    let failing = |_: &crate::models::SessionSummary| {
+        failures.set(failures.get() + 1);
+        Err::<Vec<crate::models::Message>, String>("busy".into())
+    };
+    search::sync_with(&index, &[session.clone()], &failing);
+    assert_eq!(search::search_in(&index, "gimbal", None).unwrap()[0].message_id, "m1");
+
+    // It is tried again on the next scan, even though its summary is the same.
+    search::sync_with(&index, &[session.clone()], &failing);
+    assert_eq!(failures.get(), 2);
+    let fixed = |_: &crate::models::SessionSummary| Ok(vec![text_message("m2", "user", "Rewritten thruster notes")]);
+    search::sync_with(&index, &[session.clone()], &fixed);
+    assert!(search::search_in(&index, "gimbal", None).unwrap().is_empty());
+    assert_eq!(search::search_in(&index, "thruster", None).unwrap()[0].message_id, "m2");
+
+    // A new conversation that cannot be read is retried too.
+    let mut fresh = project_session("/tmp/b", "beta", "Beta");
+    fresh.id = "s2".into();
+    search::sync_with(&index, &[session.clone(), fresh.clone()], &failing);
+    let later = |summary: &crate::models::SessionSummary| {
+        Ok(vec![text_message("m1", "user", if summary.id == "s2" { "Late reactor log" } else { "Rewritten thruster notes" })])
+    };
+    search::sync_with(&index, &[session, fresh], &later);
+    assert_eq!(search::search_in(&index, "reactor", None).unwrap()[0].id, "s2");
+}
+
+#[test]
+fn search_returns_every_matching_conversation() {
+    use crate::search;
+
+    let index = search::memory_index();
+    let mut sessions = Vec::new();
+    for number in 0..300 {
+        let mut session = project_session("/tmp/a", "alpha", "Alpha");
+        session.id = format!("s{number}");
+        sessions.push(session);
+    }
+    // One very chatty conversation must not crowd out the rest.
+    let load = |session: &crate::models::SessionSummary| {
+        let count = if session.id == "s0" { 5000 } else { 1 };
+        Ok((0..count)
+            .map(|index| text_message(&format!("m{index}"), "user", "common deploy step"))
+            .collect())
+    };
+    search::sync_with(&index, &sessions, &load);
+
+    let hits = search::search_in(&index, "deploy", None).unwrap();
+    assert_eq!(hits.len(), 300);
+    assert_eq!(hits.iter().find(|hit| hit.id == "s0").unwrap().matches, 5000);
+    assert!(hits.iter().all(|hit| hit.snippet.contains("\u{1}deploy\u{2}")));
+    assert_eq!(search::search_in(&index, "deploy", Some(5)).unwrap().len(), 5);
+}

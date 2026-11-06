@@ -83,7 +83,7 @@ async fn get_session(id: String, agent: AgentId, path: String) -> Result<Session
 /// Conversations whose text contains every word of `query`, best match first.
 #[tauri::command]
 async fn search_sessions(query: String, limit: Option<usize>) -> Result<Vec<search::ContentHit>, String> {
-    tauri::async_runtime::spawn_blocking(move || search::search(&query, limit.unwrap_or(200)))
+    tauri::async_runtime::spawn_blocking(move || search::search(&query, limit))
         .await
         .map_err(task_failed)?
 }
@@ -214,7 +214,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            use tauri::Manager;
+            use tauri::{Emitter, Manager};
+            let handle = app.handle().clone();
+            search::on_change(move || {
+                let _ = handle.emit("search-index-changed", ());
+            });
             if let Ok(dir) = app.path().app_cache_dir() {
                 let _ = std::fs::create_dir_all(&dir);
                 search::init(&dir);

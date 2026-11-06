@@ -83,9 +83,19 @@ export async function fetchSession(locator: SessionLocator): Promise<SessionDeta
   });
 }
 
-/** Conversations whose text contains every word of `query`, best match first. */
-export async function searchConversations(query: string, limit = 200): Promise<ContentHit[]> {
-  return invoke<ContentHit[]>("search_sessions", { query, limit });
+/** Every conversation whose text contains every word of `query`, best match first. */
+export async function searchConversations(query: string): Promise<ContentHit[]> {
+  return invoke<ContentHit[]>("search_sessions", { query });
+}
+
+/**
+ * Calls `onChange` whenever the search index gains, loses or rewrites
+ * conversations, or reports progress. Returns a function that stops listening.
+ */
+export async function onSearchIndexChange(onChange: () => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen("search-index-changed", () => onChange());
 }
 
 export async function fetchSearchIndexStatus(): Promise<SearchIndexStatus> {
