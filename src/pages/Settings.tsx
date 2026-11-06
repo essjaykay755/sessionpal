@@ -12,6 +12,7 @@ import {
   FolderLock,
   FolderOpen,
   GithubLogo,
+  Globe,
   HardDrives,
   Info,
   LockSimple,
@@ -21,6 +22,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sun,
+  UserCircle,
 } from "@phosphor-icons/react";
 import { AGENTS, AGENT_CLASS, AGENT_ORDER } from "../lib/agents";
 import { APP_INFO, RELEASES, formatReleaseDate, type Release } from "../lib/about";
@@ -35,13 +37,14 @@ import { useApp } from "../lib/store";
 import type { AgentId, ExportFormat, SearchIndexStatus, ThemeSetting } from "../lib/types";
 import { bytes, cn, homePath, number, relativeTime } from "../lib/utils";
 import { AgentMark, BrandMark } from "../components/Brand";
-import { PageHeader, PageScroll } from "../components/PageChrome";
+import { PageHeader, PageScroll, SectionNav } from "../components/PageChrome";
 import {
   Badge,
   Button,
   EstimatedTag,
   Segmented,
   Switch,
+  Tooltip,
 } from "../components/ui";
 
 export default function SettingsPage() {
@@ -68,6 +71,7 @@ export default function SettingsPage() {
     requestFolderAccess,
     updateScanSettings,
   } = useApp();
+  const [section, setSection] = useState<"general" | "agents" | "storage" | "privacy" | "about">("general");
   const enabled = settings.enabledAgents;
   const toggleAgent = (agent: AgentId, next: boolean) => {
     const agents = next ? [...enabled, agent] : enabled.filter((id) => id !== agent);
@@ -152,8 +156,21 @@ export default function SettingsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3.5 xl:grid-cols-12">
-        <div className="flex flex-col gap-3.5 xl:col-span-8">
+      <SectionNav
+        label="Settings sections"
+        idPrefix="settings-section"
+        value={section}
+        onChange={setSection}
+        options={[
+          { value: "general", label: "General" },
+          { value: "agents", label: "Agents & folders" },
+          { value: "storage", label: "Storage & search" },
+          { value: "privacy", label: "Privacy" },
+          { value: "about", label: "About" },
+        ]}
+      />
+      {section === "general" && (
+        <div className="flex max-w-[900px] flex-col gap-3.5">
           <section id="appearance" className="card p-5 sm:p-6">
             <SectionHeading
               icon={<Palette className="h-4 w-4" />}
@@ -227,62 +244,51 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section id="storage" className="card p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-3">
-              <SectionHeading
-                icon={<HardDrives className="h-4 w-4" />}
-                title="Storage"
-                detail="Where SessionPal reads and where archives are written."
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<ArrowsClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
-                onClick={() => void rescan()}
-              >
-                Rescan
-              </Button>
-            </div>
-
-            <div className="mt-4 rounded-[14px] border border-line/[0.075] bg-sunken/40 p-3.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-11 font-medium uppercase tracking-[0.1em] text-faint">
-                  Backup folder
-                </span>
-                <span className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => void copyPath(settings.backupFolder)}
-                    className="flex h-6 items-center gap-1 rounded-full px-2 text-11 font-medium text-muted transition-colors hover:bg-line/[0.06] hover:text-fg"
-                  >
-                    <Copy className="h-3 w-3" /> Copy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void revealLocation(settings.backupFolder, "Backup folder")}
-                    className="flex h-6 items-center gap-1 rounded-full px-2 text-11 font-medium text-muted transition-colors hover:bg-line/[0.06] hover:text-fg"
-                  >
-                    <FolderOpen className="h-3 w-3" /> Reveal
-                  </button>
-                </span>
-              </div>
-              <div className="mt-1.5 break-all font-mono text-11 leading-relaxed text-fg/70">
-                {homePath(settings.backupFolder)}
-              </div>
-              <p className="mt-1.5 text-11 text-faint">
-                Managed by the desktop app. Archives are created only when you ask.
-              </p>
-            </div>
-
-            <SearchIndexPanel
-              native={native && !demo}
-              onClear={async () => {
-                await clearSearchIndex();
-                notify("Search index cleared", "It is rebuilt from your conversations now.");
-                await rescan();
-              }}
+          <section id="defaults" className="card p-5 sm:p-6">
+            <SectionHeading
+              icon={<SlidersHorizontal className="h-4 w-4" />}
+              title="Defaults"
+              detail="Start exports and estimates the way you like them."
             />
-
+            <div className="mt-4 divide-y divide-line/[0.06]">
+              <SettingRow
+                title="Default export format"
+                detail="Preselected when you export one or more sessions."
+                control={
+                  <Segmented<ExportFormat>
+                    value={settings.defaultExport}
+                    onChange={(value) => updateSettings({ defaultExport: value })}
+                    options={[
+                      { value: "markdown", label: "Markdown" },
+                      { value: "json", label: "JSON" },
+                    ]}
+                    compact
+                    className="bg-sunken/60"
+                  />
+                }
+              />
+              <SettingRow
+                title="Cost method"
+                detail="Public API list prices, stored locally. Nothing is fetched."
+                control={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 px-2.5 text-11"
+                    onClick={() => openDialog({ kind: "explain-costs" })}
+                  >
+                    Review prices
+                  </Button>
+                }
+              />
+            </div>
+          </section>
+        </div>
+      )}
+      {section === "agents" && (
+        <div className="flex max-w-[900px] flex-col gap-3.5">
+          <section className="card p-5 sm:p-6">
+            <SectionHeading icon={<Database className="h-4 w-4" />} title="Agents" detail="Choose which agents are included in your library." />
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between px-1">
                 <span className="text-11 font-medium uppercase tracking-[0.1em] text-faint">
@@ -350,19 +356,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-11 text-faint">
-              <span className="flex items-center gap-1.5">
-                <Database className="h-3 w-3" /> {bytes(totalStorage)} session files
-              </span>
-              <span className="flex items-center gap-1.5">
-                <FileText className="h-3 w-3" /> {bytes(totalBackupSize)} archives
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Info className="h-3 w-3" /> Last scan {relativeTime(lastScanAt)}
-              </span>
-            </div>
           </section>
-
           <section id="project-folders" className="card p-5 sm:p-6">
             <SectionHeading
               icon={<FolderLock className="h-4 w-4" />}
@@ -442,93 +436,129 @@ export default function SettingsPage() {
             )}
           </section>
 
-          <section id="defaults" className="card p-5 sm:p-6">
-            <SectionHeading
-              icon={<SlidersHorizontal className="h-4 w-4" />}
-              title="Defaults"
-              detail="Start exports and estimates the way you like them."
-            />
-            <div className="mt-4 divide-y divide-line/[0.06]">
-              <SettingRow
-                title="Default export format"
-                detail="Preselected when you export one or more sessions."
-                control={
-                  <Segmented<ExportFormat>
-                    value={settings.defaultExport}
-                    onChange={(value) => updateSettings({ defaultExport: value })}
-                    options={[
-                      { value: "markdown", label: "Markdown" },
-                      { value: "json", label: "JSON" },
-                    ]}
-                    compact
-                    className="bg-sunken/60"
-                  />
-                }
-              />
-              <SettingRow
-                title="Cost method"
-                detail="Public API list prices, stored locally. Nothing is fetched."
-                control={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="h-7 px-2.5 text-11"
-                    onClick={() => openDialog({ kind: "explain-costs" })}
-                  >
-                    Review prices
-                  </Button>
-                }
-              />
-            </div>
-          </section>
         </div>
-
-        <aside className="flex flex-col gap-3.5 self-start xl:col-span-4">
-          <section className="card p-5">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-success" />
-              <h2 className="text-13 font-bold tracking-[-0.02em]">Privacy</h2>
+      )}
+      {section === "storage" && (
+        <div className="max-w-[900px]">
+          <section id="storage" className="card p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <SectionHeading
+                icon={<HardDrives className="h-4 w-4" />}
+                title="Storage"
+                detail="Where SessionPal reads and where archives are written."
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<ArrowsClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
+                onClick={() => void rescan()}
+              >
+                Rescan
+              </Button>
             </div>
-            <ul className="mt-3 space-y-2.5">
-              {[
-                { icon: <LockSimple className="h-3.5 w-3.5" />, title: "No account", detail: "Nothing to sign in to." },
-                { icon: <CloudSlash className="h-3.5 w-3.5" />, title: "No network", detail: "Sessions never leave this device." },
-                { icon: <ShieldCheck className="h-3.5 w-3.5" />, title: "No telemetry", detail: "No analytics, crash reports or update checks." },
-              ].map((item) => (
-                <li key={item.title} className="flex items-start gap-2.5">
-                  <span className="mt-0.5 text-faint">{item.icon}</span>
-                  <div>
-                    <div className="text-12 font-medium text-fg/85">{item.title}</div>
-                    <div className="text-11 text-muted">{item.detail}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-4 w-full"
-              onClick={() => openDialog({ kind: "privacy" })}
-            >
-              Read the local data note
+
+            <div className="mt-4 rounded-[14px] border border-line/[0.075] bg-sunken/40 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-11 font-medium uppercase tracking-[0.1em] text-faint">
+                  Backup folder
+                </span>
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void copyPath(settings.backupFolder)}
+                    className="flex h-6 items-center gap-1 rounded-full px-2 text-11 font-medium text-muted transition-colors hover:bg-line/[0.06] hover:text-fg"
+                  >
+                    <Copy className="h-3 w-3" /> Copy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void revealLocation(settings.backupFolder, "Backup folder")}
+                    className="flex h-6 items-center gap-1 rounded-full px-2 text-11 font-medium text-muted transition-colors hover:bg-line/[0.06] hover:text-fg"
+                  >
+                    <FolderOpen className="h-3 w-3" /> Reveal
+                  </button>
+                </span>
+              </div>
+              <div className="mt-1.5 break-all font-mono text-11 leading-relaxed text-fg/70">
+                {homePath(settings.backupFolder)}
+              </div>
+              <p className="mt-1.5 text-11 text-faint">
+                Managed by the desktop app. Archives are created only when you ask.
+              </p>
+            </div>
+
+            <SearchIndexPanel
+              native={native && !demo}
+              onClear={async () => {
+                await clearSearchIndex();
+                notify("Search index cleared", "It is rebuilt from your conversations now.");
+                await rescan();
+              }}
+            />
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-11 text-faint">
+              <span className="flex items-center gap-1.5">
+                <Database className="h-3 w-3" /> {bytes(totalStorage)} session files
+              </span>
+              <span className="flex items-center gap-1.5">
+                <FileText className="h-3 w-3" /> {bytes(totalBackupSize)} archives
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Info className="h-3 w-3" /> Last scan {relativeTime(lastScanAt)}
+              </span>
+            </div>
+          </section>
+
+        </div>
+      )}
+      {section === "privacy" && (
+        <section className="card max-w-[1040px] overflow-hidden">
+          <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
+            <div className="flex max-w-[560px] items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-success/10 text-success">
+                <ShieldCheck className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-16 font-bold tracking-[-0.025em] text-fg">Your library stays yours</h2>
+                <p className="mt-1 text-12 leading-relaxed text-muted">
+                  SessionPal is designed to keep your conversations on this device.
+                </p>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => openDialog({ kind: "privacy" })}>
+              Read the local data note <ArrowSquareOut className="h-3.5 w-3.5" />
             </Button>
-          </section>
-
-          <section className="flex items-start gap-2.5 rounded-[16px] border border-line/[0.07] bg-sunken/30 p-4">
+          </div>
+          <ul className="grid grid-cols-1 border-t border-line/[0.07] sm:grid-cols-3 sm:divide-x sm:divide-line/[0.07]">
+            {[
+              { icon: <LockSimple className="h-4 w-4" />, title: "No account", detail: "Nothing to sign in to." },
+              { icon: <CloudSlash className="h-4 w-4" />, title: "No network", detail: "Sessions never leave this device." },
+              { icon: <ShieldCheck className="h-4 w-4" />, title: "No telemetry", detail: "No analytics, crash reports or update checks." },
+            ].map((item) => (
+              <li key={item.title} className="flex gap-3 border-b border-line/[0.07] px-5 py-4 last:border-b-0 sm:border-b-0 sm:px-6">
+                <span className="mt-0.5 shrink-0 text-faint">{item.icon}</span>
+                <div>
+                  <div className="text-12 font-semibold text-fg">{item.title}</div>
+                  <p className="mt-1 text-11 leading-relaxed text-muted">{item.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-start gap-2 border-t border-line/[0.07] bg-sunken/30 px-5 py-3.5 text-11 leading-relaxed text-muted sm:px-6">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />
-            <div className="text-11 leading-relaxed text-muted">
-              {demo
-                ? "This preview uses deterministic sample data. The desktop build discovers real sessions from Claude Code, Codex, Cursor, OpenCode and Antigravity."
-                : "SessionPal indexes short-lived metadata in memory. Changing preferences never rewrites agent files."}
-            </div>
-          </section>
-        </aside>
-      </div>
+            {demo
+              ? "This preview uses sample data. The desktop app discovers sessions from your selected agents."
+              : "Changing preferences never rewrites agent files."}
+          </div>
+        </section>
+      )}
+      {section === "about" && (
+        <AboutSection
+          mode={native ? (demo ? "Desktop · sample data" : "Desktop · local library") : "Browser preview"}
+          onCopyDiagnostics={() => void copyDiagnostics()}
+        />
+      )}
 
-      <AboutSection
-        mode={native ? (demo ? "Desktop · sample data" : "Desktop · local library") : "Browser preview"}
-        onCopyDiagnostics={() => void copyDiagnostics()}
-      />
     </PageScroll>
   );
 }
@@ -691,13 +721,13 @@ function AboutSection({
 }) {
   const [latest, ...older] = RELEASES;
   const links = [
-    { label: "SessionPal website", url: APP_INFO.websiteUrl, icon: null },
+    { label: "SessionPal website", url: APP_INFO.websiteUrl, icon: <Globe className="h-4 w-4" /> },
     {
       label: "Source on GitHub",
       url: APP_INFO.repositoryUrl,
-      icon: <GithubLogo className="h-3.5 w-3.5 text-faint" />,
+      icon: <GithubLogo className="h-4 w-4" />,
     },
-    { label: `${APP_INFO.developer}'s website`, url: APP_INFO.developerUrl, icon: null },
+    { label: `${APP_INFO.developer}'s website`, url: APP_INFO.developerUrl, icon: <UserCircle className="h-4 w-4" /> },
   ].filter((link) => link.url);
 
   return (
@@ -716,21 +746,18 @@ function AboutSection({
           </dl>
 
           {links.length > 0 && (
-            <div className="mt-3 flex w-full flex-col gap-1.5">
+            <div className="mt-4 flex items-center justify-center gap-1.5">
               {links.map((link) => (
-                <Button
-                  key={link.label}
-                  variant="secondary"
-                  size="sm"
-                  className="w-full justify-between"
-                  onClick={() => void openUrl(link.url)}
-                >
-                  <span className="flex items-center gap-1.5">
+                <Tooltip key={link.label} label={link.label} side="top">
+                  <button
+                    type="button"
+                    aria-label={link.label}
+                    onClick={() => void openUrl(link.url)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-line/[0.09] text-muted transition-colors hover:bg-sunken/60 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500"
+                  >
                     {link.icon}
-                    {link.label}
-                  </span>
-                  <ArrowSquareOut className="h-3.5 w-3.5 text-faint" />
-                </Button>
+                  </button>
+                </Tooltip>
               ))}
             </div>
           )}

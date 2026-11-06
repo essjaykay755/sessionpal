@@ -39,7 +39,7 @@ import { AgentMark } from "../components/Brand";
 import { AreaChart } from "../components/charts";
 import { percentChange, ProjectCostTable } from "../components/ProjectCostTable";
 import { ProjectDetail } from "../components/ProjectDetail";
-import { PageHeader, PageScroll, SectionTitle } from "../components/PageChrome";
+import { PageHeader, PageScroll, SectionNav, SectionTitle } from "../components/PageChrome";
 import { AgentBadge, AnimatedNumber, Button, EstimatedTag, Segmented } from "../components/ui";
 
 const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = (
@@ -49,6 +49,7 @@ const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = (
 export default function UsagePage() {
   const { sessions, settings, openDialog, updateSettings, focusAgent, effectiveTheme } =
     useApp();
+  const [section, setSection] = useState<"overview" | "projects" | "models">("overview");
   const [range, setRange] = useState<RangeKey>("30d");
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
 
@@ -132,6 +133,19 @@ export default function UsagePage() {
         }
       />
 
+      <SectionNav
+        label="Usage sections"
+        idPrefix="usage-section"
+        value={section}
+        onChange={setSection}
+        options={[
+          { value: "overview", label: "Overview" },
+          { value: "projects", label: "Projects" },
+          { value: "models", label: "Models & agents" },
+        ]}
+      />
+      {section === "overview" && (
+        <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Tokens processed"
@@ -267,37 +281,150 @@ export default function UsagePage() {
           </div>
         </div>
 
-        <div className="card min-w-0 p-5 lg:col-span-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-14 font-semibold text-fg">Sessions by agent</h2>
-            <span className="text-12 text-muted">{number(totals.sessions)} total</span>
-          </div>
-          <div className="mt-4 space-y-3">
-            {agents.map((agent) => (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => focusAgent(agent.id)}
-                className="group block w-full rounded-[8px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500"
-              >
-                <span className="flex items-center gap-2 text-12">
-                  <span className={`${AGENT_CLASS[agent.id]} text-[var(--agent)]`}>
-                    <AgentMark agent={agent.id} className="h-4 w-4" />
+        <div className="lg:col-span-4">
+          <div className="card p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-14 font-bold tracking-[-0.025em]">Token composition</h2>
+              <span className="text-11 text-faint">{compact(totals.tokens)}</span>
+            </div>
+            <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-line/[0.055]">
+              {parts.map((part) => (
+                <motion.span
+                  key={part.label}
+                  initial={false}
+                  animate={{ width: `${(part.value / tokenTotal) * 100}%` }}
+                  transition={{ duration: 0.12 }}
+                  style={{ backgroundColor: part.color }}
+                  title={`${part.label}: ${number(part.value)}`}
+                />
+              ))}
+            </div>
+            <div className="mt-4 space-y-2.5">
+              {parts.map((part) => (
+                <div key={part.label} className="flex items-center gap-2.5">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: part.color }}
+                  />
+                  <span className="flex-1 text-11 text-muted">{part.label}</span>
+                  <span className="text-11 font-medium tabular text-fg/85">
+                    {compact(part.value)}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-medium text-fg/85 group-hover:text-fg">{AGENTS[agent.id].shortName}</span>
-                  <span className="tabular text-muted">{number(agent.sessions)}</span>
-                  <span className="w-11 text-right tabular text-faint">{pct(agent.share, 0)}</span>
-                </span>
-                <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-line/[0.06]">
-                  <span className={cn("block h-full rounded-full bg-[var(--agent)]", AGENT_CLASS[agent.id])} style={{ width: `${agent.share}%` }} />
-                </span>
-              </button>
-            ))}
+                  <span className="w-10 text-right text-11 tabular text-faint">
+                    {pct((part.value / tokenTotal) * 100, 1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 rounded-[11px] bg-sunken/50 px-3 py-2.5 text-11 leading-relaxed text-muted">
+              {pct(cacheShare, 0)} of tokens were cache reads. That reuse
+              {settings.showCosts && totals.savingsSessions > 0 ? ` saved about ${money(totals.cacheSavings)} in cache-read costs${hasIncompleteSavings ? " for priced sessions" : ""}.` : "."}
+            </div>
           </div>
+
         </div>
       </section>
+        </>
+      )}
+      {section === "projects" && (
+        <>
+          <div className="mb-3 flex justify-end">
+            <Segmented
+              value={displayedMetric}
+              options={[
+                { value: "tokens", label: "Tokens" },
+                ...(hasPricedSessions ? [{ value: "cost" as const, label: "Est. cost" }] : []),
+              ]}
+              onChange={setMetric}
+              compact
+              className="bg-sunken/60"
+            />
+          </div>
+          <div className="max-w-[700px]">
+          <div className="card flex-1 p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-14 font-bold tracking-[-0.025em]">
+                Top projects
+                <span className="ml-1.5 text-11 font-medium text-faint">
+                  by {rankByCost ? "est. cost" : "tokens"}
+                </span>
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-11"
+                onClick={() =>
+                  document.getElementById("projects")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                All projects
+                <ArrowRight className="h-2.5 w-2.5" />
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2.5">
+              {projects.map((project, index) => (
+                <button
+                  key={project.key}
+                  type="button"
+                  onClick={() => setOpenProjectKey(project.key)}
+                  className="-mx-1.5 flex w-[calc(100%+12px)] items-center gap-2.5 rounded-[8px] px-1.5 py-0.5 text-left transition-colors hover:bg-sunken/45"
+                >
+                  <span className="w-3 text-11 tabular text-faint">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-11 font-medium text-fg/85">
+                        {project.label}
+                      </span>
+                      <span className="shrink-0 text-11 tabular text-faint">
+                        {rankByCost ? (
+                          <>
+                            {money(project.cost)}
+                            {!project.costComplete && "*"}
+                          </>
+                        ) : (
+                          compact(project.tokens)
+                        )}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/[0.055]">
+                      <motion.span
+                        initial={false}
+                        animate={{
+                          width: `${projects[0]?.value ? (project.value / projects[0].value) * 100 : 0}%`,
+                        }}
+                        transition={{ duration: 0.12 }}
+                        className="block h-full rounded-full bg-copper-400/70"
+                      />
+                    </div>
+                  </div>
+                  <span className="w-7 text-right text-11 tabular text-faint">
+                    {project.sessions}
+                  </span>
+                </button>
+              ))}
+              {projects.length === 0 && (
+                <div className="py-5 text-center text-11 text-muted">
+                  Nothing recorded in this range.
+                </div>
+              )}
+            </div>
+          </div>
+          </div>
+      <ProjectCostTable
+        projects={projectCosts}
+        previous={previousProjectCosts}
+        range={range}
+        rangeLabel={RANGE_LABELS[range]}
+        metric={displayedMetric}
+        showCosts={settings.showCosts}
+        color={chartColor}
+        onOpen={(project) => setOpenProjectKey(project.key)}
+      />
 
-      <section className="mt-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-12">
+        </>
+      )}
+      {section === "models" && (
+        <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         <div className="card overflow-hidden lg:col-span-8">
           <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-5 sm:px-6">
             <div>
@@ -379,128 +506,36 @@ export default function UsagePage() {
           )}
         </div>
 
-        <div className="flex flex-col gap-3.5 lg:col-span-4">
-          <div className="card p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-14 font-bold tracking-[-0.025em]">Token composition</h2>
-              <span className="text-11 text-faint">{compact(totals.tokens)}</span>
-            </div>
-            <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-line/[0.055]">
-              {parts.map((part) => (
-                <motion.span
-                  key={part.label}
-                  initial={false}
-                  animate={{ width: `${(part.value / tokenTotal) * 100}%` }}
-                  transition={{ duration: 0.12 }}
-                  style={{ backgroundColor: part.color }}
-                  title={`${part.label}: ${number(part.value)}`}
-                />
-              ))}
-            </div>
-            <div className="mt-4 space-y-2.5">
-              {parts.map((part) => (
-                <div key={part.label} className="flex items-center gap-2.5">
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: part.color }}
-                  />
-                  <span className="flex-1 text-11 text-muted">{part.label}</span>
-                  <span className="text-11 font-medium tabular text-fg/85">
-                    {compact(part.value)}
-                  </span>
-                  <span className="w-10 text-right text-11 tabular text-faint">
-                    {pct((part.value / tokenTotal) * 100, 1)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 rounded-[11px] bg-sunken/50 px-3 py-2.5 text-11 leading-relaxed text-muted">
-              {pct(cacheShare, 0)} of tokens were cache reads. That reuse
-              {settings.showCosts && totals.savingsSessions > 0 ? ` saved about ${money(totals.cacheSavings)} in cache-read costs${hasIncompleteSavings ? " for priced sessions" : ""}.` : "."}
-            </div>
+        <div className="card min-w-0 p-5 lg:col-span-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-14 font-semibold text-fg">Sessions by agent</h2>
+            <span className="text-12 text-muted">{number(totals.sessions)} total</span>
           </div>
-
-          <div className="card flex-1 p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-14 font-bold tracking-[-0.025em]">
-                Top projects
-                <span className="ml-1.5 text-11 font-medium text-faint">
-                  by {rankByCost ? "est. cost" : "tokens"}
-                </span>
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1.5 text-11"
-                onClick={() =>
-                  document.getElementById("projects")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
+          <div className="mt-4 space-y-3">
+            {agents.map((agent) => (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => focusAgent(agent.id)}
+                className="group block w-full rounded-[8px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500"
               >
-                All projects
-                <ArrowRight className="h-2.5 w-2.5" />
-              </Button>
-            </div>
-            <div className="mt-3 space-y-2.5">
-              {projects.map((project, index) => (
-                <button
-                  key={project.key}
-                  type="button"
-                  onClick={() => setOpenProjectKey(project.key)}
-                  className="-mx-1.5 flex w-[calc(100%+12px)] items-center gap-2.5 rounded-[8px] px-1.5 py-0.5 text-left transition-colors hover:bg-sunken/45"
-                >
-                  <span className="w-3 text-11 tabular text-faint">{index + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-11 font-medium text-fg/85">
-                        {project.label}
-                      </span>
-                      <span className="shrink-0 text-11 tabular text-faint">
-                        {rankByCost ? (
-                          <>
-                            {money(project.cost)}
-                            {!project.costComplete && "*"}
-                          </>
-                        ) : (
-                          compact(project.tokens)
-                        )}
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/[0.055]">
-                      <motion.span
-                        initial={false}
-                        animate={{
-                          width: `${projects[0]?.value ? (project.value / projects[0].value) * 100 : 0}%`,
-                        }}
-                        transition={{ duration: 0.12 }}
-                        className="block h-full rounded-full bg-copper-400/70"
-                      />
-                    </div>
-                  </div>
-                  <span className="w-7 text-right text-11 tabular text-faint">
-                    {project.sessions}
+                <span className="flex items-center gap-2 text-12">
+                  <span className={`${AGENT_CLASS[agent.id]} text-[var(--agent)]`}>
+                    <AgentMark agent={agent.id} className="h-4 w-4" />
                   </span>
-                </button>
-              ))}
-              {projects.length === 0 && (
-                <div className="py-5 text-center text-11 text-muted">
-                  Nothing recorded in this range.
-                </div>
-              )}
-            </div>
+                  <span className="min-w-0 flex-1 truncate font-medium text-fg/85 group-hover:text-fg">{AGENTS[agent.id].shortName}</span>
+                  <span className="tabular text-muted">{number(agent.sessions)}</span>
+                  <span className="w-11 text-right tabular text-faint">{pct(agent.share, 0)}</span>
+                </span>
+                <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-line/[0.06]">
+                  <span className={cn("block h-full rounded-full bg-[var(--agent)]", AGENT_CLASS[agent.id])} style={{ width: `${agent.share}%` }} />
+                </span>
+              </button>
+            ))}
           </div>
         </div>
-      </section>
-
-      <ProjectCostTable
-        projects={projectCosts}
-        previous={previousProjectCosts}
-        range={range}
-        rangeLabel={RANGE_LABELS[range]}
-        metric={displayedMetric}
-        showCosts={settings.showCosts}
-        color={chartColor}
-        onOpen={(project) => setOpenProjectKey(project.key)}
-      />
+        </section>
+      )}
 
       <ProjectDetail
         project={openProject}

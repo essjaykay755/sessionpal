@@ -62,3 +62,40 @@ export function SectionTitle({
     </div>
   );
 }
+
+/** In-page navigation that keeps the main sidebar focused on top-level areas. */
+export function SectionNav<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  idPrefix,
+}: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+  idPrefix: string;
+}) {
+  return (
+    <nav aria-label={label} className="mb-5 flex flex-wrap gap-1 border-b border-line/[0.08]">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          id={`${idPrefix}-${option.value}`}
+          type="button"
+          aria-current={value === option.value ? "page" : undefined}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "-mb-px border-b-2 px-3 py-2.5 text-12 font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500",
+            value === option.value
+              ? "border-copper-500 text-fg"
+              : "border-transparent text-muted hover:text-fg",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </nav>
+  );
+}

@@ -7,6 +7,15 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.4.2] - 2026-11-06
+
+### Changed
+
+- Moved the sidebar toggle to the title bar beside the sidebar, where it stays available as the sidebar opens and closes.
+- Organized Settings into General, Agents & folders, Storage & search, Privacy, and About sections.
+- Split Usage & cost into Overview, Projects, and Models & agents, with the selected date range shared across sections.
+- Redesigned the privacy section and replaced the About page's website links with a compact row of icons.
+
 ## [0.4.1] - 2026-11-06
 
 ### Changed

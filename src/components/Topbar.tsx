@@ -3,6 +3,7 @@ import {
   MagnifyingGlass,
   Minus,
   Moon,
+  SidebarSimple,
   Square,
   Sun,
   X,
@@ -34,6 +35,8 @@ export function Topbar() {
     sessions,
     error,
     openDialog,
+    settings,
+    toggleSidebar,
   } = useApp();
   const isMac = platform() === "macos";
   const mod = isMac ? "⌘" : "Ctrl";
@@ -59,7 +62,20 @@ export function Topbar() {
       data-tauri-drag-region
       className="relative z-20 flex h-[54px] shrink-0 select-none items-center justify-between gap-4 px-4 sm:px-5 xl:px-6"
     >
-      <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center self-stretch">
+      <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-3 self-stretch">
+        <div className="hidden lg:block">
+          <Tooltip label={settings.sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"} side="bottom">
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label={settings.sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+              aria-expanded={settings.sidebarExpanded}
+              className="flex h-8 w-8 items-center justify-center rounded-[8px] text-muted transition-colors hover:bg-line/[0.06] hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500"
+            >
+              <SidebarSimple className="h-[18px] w-[18px]" />
+            </button>
+          </Tooltip>
+        </div>
         <span
           data-tauri-drag-region
           aria-hidden={!showPageTitle}

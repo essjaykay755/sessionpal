@@ -6,12 +6,10 @@ import {
   ChatCircleDots,
   GearSix,
   HardDrives,
-  SidebarSimple,
   SquaresFour,
   type IconProps,
 } from "@phosphor-icons/react";
 import { useApp } from "../lib/store";
-import { platform } from "../lib/native";
 import type { PageId } from "../lib/types";
 import { cn, compact } from "../lib/utils";
 import { BrandMark } from "./Brand";
@@ -41,12 +39,11 @@ function useNarrowWindow(): boolean {
 }
 
 export function Sidebar() {
-  const { page, navigate, toggleSidebar, settings, backups, sessions, native, loading, error } =
+  const { page, navigate, settings, backups, sessions, native, loading, error } =
     useApp();
   const narrow = useNarrowWindow();
   const expanded = settings.sidebarExpanded && !narrow;
   const scanning = native && loading && sessions.length === 0 && !error;
-  const macWindow = native && platform() === "macos";
 
   const mainNav: NavItem[] = [
     { page: "overview", label: "Overview", icon: SquaresFour },
@@ -97,20 +94,6 @@ export function Sidebar() {
     );
   };
 
-  const toggle = (
-    <Tooltip label={expanded ? "Hide labels" : "Show labels"} side="right">
-      <button
-        type="button"
-        onClick={toggleSidebar}
-        disabled={narrow}
-        aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-        className="flex h-7 w-7 items-center justify-center rounded-[8px] text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:hidden"
-      >
-        <SidebarSimple className="h-[17px] w-[17px]" />
-      </button>
-    </Tooltip>
-  );
-
   return (
     <motion.aside
       initial={false}
@@ -119,15 +102,7 @@ export function Sidebar() {
       className="relative z-30 flex h-full shrink-0 select-none flex-col overflow-hidden bg-[var(--rail)] text-[#f6efe4]"
     >
       {/* The macOS window buttons sit in this row; the rest of it drags the window. */}
-      <div
-        data-tauri-drag-region
-        className={cn(
-          "flex h-[46px] shrink-0 items-center",
-          expanded ? "justify-end px-3" : "justify-center",
-        )}
-      >
-        {expanded && toggle}
-      </div>
+      <div data-tauri-drag-region className="h-[46px] shrink-0" />
 
       <div className={cn("flex items-center gap-2 pb-4", expanded ? "px-4" : "flex-col px-0")}>
         <button
@@ -142,8 +117,6 @@ export function Sidebar() {
             <span className="text-14 font-bold tracking-[-0.03em] text-[#f6efe4]">SessionPal</span>
           )}
         </button>
-        {!expanded && !macWindow && toggle}
-        {!expanded && macWindow && <div className="mt-1">{toggle}</div>}
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 px-3" aria-label="Main">

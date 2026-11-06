@@ -131,7 +131,7 @@ export function CommandPalette() {
         run: () => {
           navigate("settings");
           window.setTimeout(
-            () => document.getElementById("about")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            () => document.getElementById("settings-section-about")?.click(),
             80,
           );
         },
