@@ -14,7 +14,8 @@ test('About shows every version and changelog item with Windows and Unix line en
   assert.deepEqual(windows, unix);
   assert.deepEqual(RELEASES, unix);
   assert.equal(unix[0].version, APP_INFO.version);
-  assert.equal(unix[0].sections.flatMap((section) => section.items).length, 9);
+  assert.equal(unix.find((release) => release.version === '0.5.0')?.sections.flatMap((section) => section.items).length, 9);
+  assert.ok(unix[0].sections.some((section) => section.items.length > 0));
   assert.ok(unix.some((release) => release.version === '0.4.0' && release.sections.some((section) => section.items.length === 5)));
 });
 

@@ -7,6 +7,13 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.5.1] - 2026-11-06
+
+### Changed
+
+- Show prices for the models found in your sessions, including which agents used each model and whether its rate came from models.dev or the app's saved catalog.
+- Mark models without a known price as unpriced and retain the long-context pricing note for Claude Haiku 5.5.
+
 ## [0.5.0] - 2026-11-06
 
 Keep SessionPal current and navigate the desktop app more comfortably.

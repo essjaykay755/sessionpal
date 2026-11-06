@@ -34,13 +34,23 @@ export function setLiveModels(models: ModelInfo[]): void {
   liveModels = Object.fromEntries(models.map((model) => [model.id, model]));
 }
 
-export function knownModelInfo(id: string | null | undefined): ModelInfo | null {
+function findModel(id: string | null | undefined): { model: ModelInfo; source: "models.dev" | "bundled" } | null {
   if (!id) return null;
-  if (liveModels[id]) return liveModels[id];
-  if (MODELS[id]) return MODELS[id];
-  const all = { ...MODELS, ...liveModels };
-  const base = Object.keys(all).find((key) => id.startsWith(`${key}-`) && /^\d{8}$/.test(id.slice(key.length + 1)));
-  return base ? all[base] : null;
+  if (liveModels[id]) return { model: liveModels[id], source: "models.dev" };
+  if (MODELS[id]) return { model: MODELS[id], source: "bundled" };
+  const matches = (key: string) => id.startsWith(`${key}-`) && /^\d{8}$/.test(id.slice(key.length + 1));
+  const liveBase = Object.keys(liveModels).find(matches);
+  if (liveBase) return { model: liveModels[liveBase], source: "models.dev" };
+  const bundledBase = Object.keys(MODELS).find(matches);
+  return bundledBase ? { model: MODELS[bundledBase], source: "bundled" } : null;
+}
+
+export function knownModelInfo(id: string | null | undefined): ModelInfo | null {
+  return findModel(id)?.model ?? null;
+}
+
+export function modelPriceSource(id: string): "models.dev" | "bundled" | null {
+  return findModel(id)?.source ?? null;
 }
 
 /** `gemini-3.8-flash` → `Gemini 3.8 Flash`, `claude-opus-4-1` → `Claude Opus 4.1`. */

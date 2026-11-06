@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - .github/workflows/release.yml
+      - package.json
     branches: [main]
 
 permissions:

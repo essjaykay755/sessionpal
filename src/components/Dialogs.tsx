@@ -18,7 +18,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { AGENTS, AGENT_CLASS, AGENT_ORDER, agentList, backupCoverage } from "../lib/agents";
-import { MODELS, type ModelInfo } from "../lib/pricing";
+import { knownModelInfo, modelInfo, modelPriceSource } from "../lib/pricing";
 import { livePricesUpdatedAt } from "../lib/live-pricing";
 import { useApp } from "../lib/store";
 import type { AgentId, BackupRecord, ExportFormat, SessionSummary } from "../lib/types";
@@ -909,14 +909,20 @@ function DeleteBackupDialog({
 /* ------------------------------------------------------------------ */
 
 function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { settings, updateSettings } = useApp();
-  // Group by provider so the list reads as a reference table, not a wall of rows.
-  const families = Object.entries(
-    Object.values(MODELS).reduce<Record<string, ModelInfo[]>>((groups, model) => {
-      (groups[model.family] ??= []).push(model);
-      return groups;
-    }, {}),
-  );
+  const { settings, updateSettings, sessions } = useApp();
+  const usedModels = new Map<string, Set<AgentId>>();
+  for (const session of sessions) {
+    const ids = new Set([...(session.models ?? []), session.model].filter((id): id is string => !!id));
+    for (const id of ids) {
+      const agents = usedModels.get(id) ?? new Set<AgentId>();
+      agents.add(session.agent);
+      usedModels.set(id, agents);
+    }
+  }
+  const rows = Array.from(usedModels, ([id, agents]) => ({ id, agents, info: modelInfo(id), price: knownModelInfo(id), source: modelPriceSource(id) }))
+    .sort((a, b) => a.info.label.localeCompare(b.info.label));
+  const hasHaiku = rows.some(({ id }) => /^claude-haiku-5-5(?:-\d{8})?$/.test(id));
+  const updatedAt = livePricesUpdatedAt();
 
   return (
     <Modal
@@ -954,13 +960,13 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
             <p className="mt-1 text-12 leading-relaxed text-muted">
               Estimates use current short-context API rates, including paid equivalents of recognized free models. Rates refresh from models.dev and may differ by provider. Missing cache rates use the input rate. Subscription usage, discounts and long-context rates are not included.
             </p>
-            <p className="mt-1 text-11 text-faint">{livePricesUpdatedAt() ? `Price data last updated: ${livePricesUpdatedAt()}.` : "Using bundled fallback prices until model prices are available."}</p>
+            <p className="mt-1 text-11 text-faint">{updatedAt ? `models.dev prices last updated: ${updatedAt}.` : "Online prices have not been loaded yet."}</p>
           </div>
         </div>
 
         <section>
           <div className="mb-2 flex items-baseline justify-between px-1">
-            <h3 className="text-12 font-semibold text-fg">Bundled fallback prices</h3>
+            <h3 className="text-12 font-semibold text-fg">Models in your sessions</h3>
             <span className="text-11 text-faint">USD per million tokens</span>
           </div>
           <div className="overflow-hidden rounded-[16px] border border-line/[0.075]">
@@ -981,42 +987,32 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
                   <th className="py-2.5 pr-4 text-right font-medium">Cache write</th>
                 </tr>
               </thead>
-              {families.map(([family, rows]) => (
-                <tbody
-                  key={family}
-                  className="divide-y divide-line/[0.05] border-b border-line/[0.065] last:border-b-0"
-                >
-                  <tr>
-                    <th
-                      colSpan={5}
-                      scope="colgroup"
-                      className="bg-line/[0.02] px-4 pb-1.5 pt-2.5 text-left text-11 font-semibold text-faint"
-                    >
-                      {family}
-                    </th>
-                  </tr>
-                  {rows.map((model) => (
-                    <tr key={model.id}>
+              <tbody className="divide-y divide-line/[0.05]">
+                  {rows.map(({ id, agents, info, price, source }) => (
+                    <tr key={id}>
                       <td className="px-4 py-2">
                         <div className="flex min-w-0 items-center gap-2">
                           <span
                             className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: model.color }}
+                            style={{ backgroundColor: info.color }}
                           />
-                          <span className="truncate font-medium text-fg/85">{model.label}{model.id === "claude-haiku-5-5" ? "*" : ""}</span>
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-fg/85" title={id}>{info.label}{/^claude-haiku-5-5(?:-\d{8})?$/.test(id) ? "*" : ""}</div>
+                            <div className="truncate text-11 text-faint">{Array.from(agents, (agent) => AGENTS[agent].shortName).join(", ")} · {source === "models.dev" ? "models.dev" : source === "bundled" ? "Saved app rate" : "Unpriced"}</div>
+                          </div>
                         </div>
                       </td>
-                      <Price value={model.input} />
-                      <Price value={model.output} />
-                      <Price value={model.cacheRead} />
-                      <Price value={model.cacheWrite} />
+                      <Price value={price?.input} />
+                      <Price value={price?.output} />
+                      <Price value={price?.cacheRead} />
+                      <Price value={price?.cacheWrite} />
                     </tr>
                   ))}
-                </tbody>
-              ))}
+                  {!rows.length && <tr><td colSpan={5} className="px-4 py-5 text-center text-muted">No models found in your sessions yet.</td></tr>}
+              </tbody>
             </table>
           </div>
-          <p className="mt-2 px-1 text-11 text-faint">* Claude Haiku 5.5 estimates use base rates for prompts up to 100,000 tokens. Longer prompts have higher rates that are not included.</p>
+          {hasHaiku && <p className="mt-2 px-1 text-11 text-faint">* Claude Haiku 5.5 estimates use base rates for prompts up to 100,000 tokens. Longer prompts have higher rates that are not included.</p>}
         </section>
 
         <section>
@@ -1055,10 +1051,10 @@ function formatRate(value: number): string {
   return Number(fixed) === value ? fixed : String(value);
 }
 
-function Price({ value }: { value: number }) {
+function Price({ value }: { value?: number }) {
   return (
     <td className="py-2 pr-4 text-right tabular text-muted">
-      {value ? `$${formatRate(value)}` : "—"}
+      {value == null ? "—" : `$${formatRate(value)}`}
     </td>
   );
 }
