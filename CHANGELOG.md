@@ -7,6 +7,12 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.4.1] - 2026-11-06
+
+### Changed
+
+- Updated SessionPal's logo throughout the app and desktop icons.
+
 ## [0.4.0] - 2026-11-06
 
 Search what was said, not just session titles.
