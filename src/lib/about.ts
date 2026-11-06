@@ -39,7 +39,7 @@ export function parseChangelog(source: string): Release[] {
   let release: Release | null = null;
   let section: ReleaseSection | null = null;
 
-  for (const line of source.split("\n")) {
+  for (const line of source.split(/\r?\n/)) {
     const heading = RELEASE_HEADING.exec(line);
     if (heading) {
       release = { version: heading[1], date: heading[2] ?? null, summary: null, sections: [] };
@@ -63,6 +63,10 @@ export function parseChangelog(source: string): Release[] {
       // A list before any ### heading still belongs to the release.
       section = { title: "Changes", items: [item[1].trim()] };
       release.sections.push(section);
+    } else if (section?.items.length && /^\s{2,}\S/.test(line)) {
+      // Preserve wrapped list items, including files checked out with CRLF on Windows.
+      const last = section.items.length - 1;
+      section.items[last] += ` ${line.trim()}`;
     } else if (line.trim() && !section && !release.summary) {
       release.summary = line.trim();
     }

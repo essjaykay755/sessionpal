@@ -38,6 +38,10 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
   return api.invoke<T>(command, args);
 }
 
+export async function setPricingCatalog(prices: import("./pricing").ModelInfo[]): Promise<void> {
+  return invoke<void>("set_pricing_catalog", { prices });
+}
+
 export async function detectAgents(): Promise<AgentDetection[]> {
   return invoke<AgentDetection[]>("discover_agents");
 }

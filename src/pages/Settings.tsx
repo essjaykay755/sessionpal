@@ -34,6 +34,7 @@ import {
   platform,
 } from "../lib/native";
 import { useApp } from "../lib/store";
+import { RELEASES_URL, useUpdates } from "../lib/updates";
 import type { AgentId, ExportFormat, SearchIndexStatus, ThemeSetting } from "../lib/types";
 import { bytes, cn, homePath, number, relativeTime } from "../lib/utils";
 import { AgentMark, BrandMark } from "../components/Brand";
@@ -71,6 +72,7 @@ export default function SettingsPage() {
     requestFolderAccess,
     updateScanSettings,
   } = useApp();
+  const updates = useUpdates();
   const [section, setSection] = useState<"general" | "agents" | "storage" | "privacy" | "about">("general");
   const enabled = settings.enabledAgents;
   const toggleAgent = (agent: AgentId, next: boolean) => {
@@ -242,6 +244,15 @@ export default function SettingsPage() {
                 }
               />
             </div>
+          </section>
+
+          <section className="card p-5 sm:p-6">
+            <SectionHeading icon={<ArrowsClockwise className="h-4 w-4" />} title="Updates" detail="Check GitHub Releases for new versions of SessionPal." />
+            <div className="mt-4 divide-y divide-line/[0.06]">
+              <SettingRow title="Automatic update checks" detail="Check on launch and every six hours while SessionPal is open. Downloads require your approval." control={<Switch checked={settings.automaticUpdates} onChange={(next) => updateSettings({ automaticUpdates: next })} label="Automatic update checks" disabled={!updates.supported} />} />
+              <SettingRow title="Software update" detail={!updates.supported ? "Available in the macOS and Windows desktop apps." : updates.status === "current" ? "SessionPal is up to date." : updates.status === "available" ? `Version ${updates.version} is available. Installation closes and restarts the app.` : updates.status === "downloading" ? `Downloading${updates.progress === null ? "…" : ` ${updates.progress}%`}` : updates.status === "installing" ? "Installing update…" : updates.status === "error" ? "Update failed. Retry or download an installer from GitHub Releases." : updates.status === "checking" ? "Checking GitHub Releases…" : "Check for a new release."} control={<Button variant="secondary" size="sm" disabled={!updates.supported || ["checking", "downloading", "installing"].includes(updates.status)} onClick={() => void (updates.status === "available" ? updates.installUpdate() : updates.checkForUpdates())}>{updates.status === "available" ? "Download update" : "Check for updates"}</Button>} />
+            </div>
+            {updates.status === "error" && <div className="mt-3 text-11 text-muted"><span className="break-words">{updates.error}</span>{" "}<button type="button" className="underline" onClick={() => void openUrl(RELEASES_URL)}>Open GitHub Releases</button></div>}
           </section>
 
           <section id="defaults" className="card p-5 sm:p-6">
@@ -532,8 +543,8 @@ export default function SettingsPage() {
           <ul className="grid grid-cols-1 border-t border-line/[0.07] sm:grid-cols-3 sm:divide-x sm:divide-line/[0.07]">
             {[
               { icon: <LockSimple className="h-4 w-4" />, title: "No account", detail: "Nothing to sign in to." },
-              { icon: <CloudSlash className="h-4 w-4" />, title: "No network", detail: "Sessions never leave this device." },
-              { icon: <ShieldCheck className="h-4 w-4" />, title: "No telemetry", detail: "No analytics, crash reports or update checks." },
+              { icon: <CloudSlash className="h-4 w-4" />, title: "Local sessions", detail: "Sessions never leave this device." },
+              { icon: <ShieldCheck className="h-4 w-4" />, title: "No telemetry", detail: "No analytics or crash reports. Update checks contact GitHub and can be disabled." },
             ].map((item) => (
               <li key={item.title} className="flex gap-3 border-b border-line/[0.07] px-5 py-4 last:border-b-0 sm:border-b-0 sm:px-6">
                 <span className="mt-0.5 shrink-0 text-faint">{item.icon}</span>

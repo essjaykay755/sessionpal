@@ -461,7 +461,7 @@ export default function UsagePage() {
                     style={{ backgroundColor: model.color }}
                   />
                   <div className="min-w-0">
-                    <div className="truncate text-12 font-semibold text-fg/90">{model.label}</div>
+                    <div className="truncate text-12 font-semibold text-fg/90">{model.label}{model.id === "claude-haiku-5-5" || /^claude-haiku-5-5-\d{8}$/.test(model.id) ? "*" : ""}</div>
                     <div className="text-11 text-faint">{model.family}</div>
                   </div>
                 </div>
@@ -550,7 +550,7 @@ export default function UsagePage() {
       <div className="mt-3.5 flex items-center justify-between gap-4 rounded-[15px] border border-line/[0.06] bg-panel/55 px-4 py-3 text-11 text-faint">
         <span className="flex items-center gap-2">
           <Coins className="h-3.5 w-3.5" />
-          {hasUnpricedUsage || hasIncompleteSavings ? "Estimates exclude unpriced or mixed-model sessions. " : ""}Standard short-context API rates; cache writes use the shortest standard duration. Cache savings excludes write costs. Subscription usage is not reflected.
+          {hasUnpricedUsage || hasIncompleteSavings ? "Estimates exclude unpriced or mixed-model sessions. " : ""}Estimates use current API rates, including paid equivalents of recognized free models. Rates may differ by provider; missing cache rates use input pricing. Subscription usage is not reflected. * Haiku 5.5 uses base rates; prompts over 100,000 tokens cost more.
         </span>
         <button
           type="button"

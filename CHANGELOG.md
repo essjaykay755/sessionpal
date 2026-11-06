@@ -7,6 +7,28 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.5.0] - 2026-11-06
+
+Keep SessionPal current and navigate the desktop app more comfortably.
+
+### Added
+
+- Automatically check GitHub Releases for signed updates on macOS and Windows. Download and install an available update from the sidebar; automatic checks can be disabled in Settings.
+- Check for updates manually, follow download progress, and retry or open GitHub Releases when an update fails.
+- Refresh model pricing from a public catalog, with bundled prices as a fallback and paid-equivalent estimates for recognized free OpenCode models.
+
+### Changed
+
+- Integrated Windows window controls into the app header and removed the unused space above the sidebar logo. macOS keeps its native window controls.
+- Aligned first-launch setup indicators across steps and kept them visible while longer steps scroll.
+- Clarified pricing estimates and disclosed update checks in the privacy information.
+- Publish signed updater packages and version-specific release notes alongside installers.
+
+### Fixed
+
+- Keep usage estimates and cached scans consistent when the live pricing catalog changes.
+- Preserve wrapped changelog entries in the About version history.
+
 ## [0.4.2] - 2026-11-06
 
 ### Changed

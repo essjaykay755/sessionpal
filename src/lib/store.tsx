@@ -39,6 +39,7 @@ import {
   restoreNativeBackup,
   revealPath as revealNativePath,
   saveDialog,
+  setPricingCatalog,
   toggleMaximizeWindow,
   trashName,
 } from "./native";
@@ -62,6 +63,8 @@ import type {
   ToastMessage,
 } from "./types";
 import { bytes, filenameStamp, money, number, slugify, uid } from "./utils";
+import { loadLivePrices } from "./live-pricing";
+import { setLiveModels } from "./pricing";
 
 const PAGE_IDS: PageId[] = ["overview", "sessions", "usage", "backups", "manage", "settings"];
 const SETTINGS_KEY = "sessionpal.settings.v1";
@@ -75,6 +78,7 @@ function defaultSettings(): AppSettings {
     projectAccess: { inspect: true, allowedFolders: [] },
     theme: "light",
     sidebarExpanded: true,
+    automaticUpdates: true,
     showCosts: true,
     reduceMotion: false,
     defaultExport: "markdown",
@@ -363,6 +367,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       setError(null);
       try {
+        const prices = await loadLivePrices();
+        try {
+          await setPricingCatalog(prices);
+          setLiveModels(prices);
+        } catch {
+          // A damaged or incompatible remote cache must not block local scans.
+          await setPricingCatalog([]);
+          setLiveModels([]);
+        }
         const [nextDetections, nextSessions, nextBackups, paths] = await Promise.all([
           detectAgents(),
           fetchSessions(agents, access),

@@ -170,6 +170,7 @@ export interface AppSettings {
   projectAccess: ProjectAccess;
   theme: ThemeSetting;
   sidebarExpanded: boolean;
+  automaticUpdates: boolean;
   showCosts: boolean;
   reduceMotion: boolean;
   defaultExport: ExportFormat;

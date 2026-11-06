@@ -2,6 +2,8 @@ import { useEffect, useState, type ComponentType } from "react";
 import { motion } from "motion/react";
 import {
   Archive,
+  ArrowDown,
+  WarningCircle,
   ChartLineUp,
   ChatCircleDots,
   GearSix,
@@ -10,6 +12,8 @@ import {
   type IconProps,
 } from "@phosphor-icons/react";
 import { useApp } from "../lib/store";
+import { useUpdates } from "../lib/updates";
+import { platform } from "../lib/native";
 import type { PageId } from "../lib/types";
 import { cn, compact } from "../lib/utils";
 import { BrandMark } from "./Brand";
@@ -41,6 +45,7 @@ function useNarrowWindow(): boolean {
 export function Sidebar() {
   const { page, navigate, settings, backups, sessions, native, loading, error } =
     useApp();
+  const updates = useUpdates();
   const narrow = useNarrowWindow();
   const expanded = settings.sidebarExpanded && !narrow;
   const scanning = native && loading && sessions.length === 0 && !error;
@@ -101,8 +106,8 @@ export function Sidebar() {
       transition={{ duration: 0.16, ease: "easeOut" }}
       className="relative z-30 flex h-full shrink-0 select-none flex-col overflow-hidden bg-[var(--rail)] text-[#f6efe4]"
     >
-      {/* The macOS window buttons sit in this row; the rest of it drags the window. */}
-      <div data-tauri-drag-region className="h-[46px] shrink-0" />
+      {/* macOS needs room for its traffic lights; Windows has controls on the right. */}
+      <div data-tauri-drag-region className={cn("shrink-0", native && platform() === "windows" ? "h-3" : "h-[46px]")} />
 
       <div className={cn("flex items-center gap-2 pb-4", expanded ? "px-4" : "flex-col px-0")}>
         <button
@@ -134,6 +139,19 @@ export function Sidebar() {
       {/* A flex column stretches the tooltip wrapper, as in the nav above, so the
           collapsed button spans the rail and its icon sits centred. */}
       <div className="flex flex-col px-3 pb-3">
+        {updates.supported && ["available", "downloading", "installing", "error"].includes(updates.status) && (() => {
+          const busy = updates.status === "downloading" || updates.status === "installing";
+          const label = updates.status === "available" ? `Download update ${updates.version}`
+            : updates.status === "downloading" ? `Downloading${updates.progress === null ? "…" : ` ${updates.progress}%`}`
+            : updates.status === "installing" ? "Installing update…" : "Retry update check";
+          const button = <button type="button" aria-label={label} disabled={busy}
+            onClick={() => void (updates.status === "error" ? updates.checkForUpdates() : updates.installUpdate())}
+            className={cn("mb-1 flex h-9 w-full items-center gap-2.5 rounded-[10px] text-12 font-semibold text-[#f2bb85] hover:bg-white/[0.06] disabled:opacity-70", expanded ? "px-2.5" : "justify-center")}>
+            {updates.status === "error" ? <WarningCircle className="h-[18px] w-[18px] shrink-0" /> : <ArrowDown className="h-[18px] w-[18px] shrink-0" />}
+            {expanded && <span className="truncate">{label}</span>}
+          </button>;
+          return expanded ? button : <Tooltip label={label} side="right">{button}</Tooltip>;
+        })()}
         {renderItem({ page: "settings", label: "Settings", icon: GearSix })}
       </div>
     </motion.aside>

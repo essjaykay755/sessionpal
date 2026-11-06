@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { WarningCircle } from "@phosphor-icons/react";
 import { AppProvider, useApp } from "./lib/store";
+import { UpdateProvider } from "./lib/updates";
 import type { PageId } from "./lib/types";
 import { Sidebar } from "./components/Sidebar";
 import { openFolderPrivacySettings, platform } from "./lib/native";
@@ -227,7 +228,9 @@ function Shell() {
 export default function App() {
   return (
     <AppProvider>
-      <Shell />
+      <UpdateProvider>
+        <Shell />
+      </UpdateProvider>
     </AppProvider>
   );
 }

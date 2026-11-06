@@ -1,18 +1,16 @@
 import { useEffect, useState } from "react";
 import {
   MagnifyingGlass,
-  Minus,
   Moon,
   SidebarSimple,
-  Square,
   Sun,
-  X,
 } from "@phosphor-icons/react";
 import { useApp } from "../lib/store";
 import { platform } from "../lib/native";
 import type { PageId } from "../lib/types";
 import { cn } from "../lib/utils";
 import { IconButton, Kbd, Tooltip } from "./ui";
+import { WindowsWindowControls } from "./WindowsWindowControls";
 
 const PAGE_META: Record<PageId, string> = {
   overview: "Overview",
@@ -39,6 +37,7 @@ export function Topbar() {
     toggleSidebar,
   } = useApp();
   const isMac = platform() === "macos";
+  const windowsChrome = native && platform() === "windows";
   const mod = isMac ? "⌘" : "Ctrl";
   const scanning = native && loading && sessions.length === 0 && !error;
 
@@ -60,7 +59,7 @@ export function Topbar() {
   return (
     <header
       data-tauri-drag-region
-      className="relative z-20 flex h-[54px] shrink-0 select-none items-center justify-between gap-4 px-4 sm:px-5 xl:px-6"
+      className={cn("relative z-20 flex h-[54px] shrink-0 select-none items-center justify-between gap-4 pl-4 sm:pl-5 xl:pl-6", windowsChrome ? "pr-0" : "pr-4 sm:pr-5 xl:pr-6")}
     >
       <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-3 self-stretch">
         <div className="hidden lg:block">
@@ -131,6 +130,7 @@ export function Topbar() {
           onClick={toggleTheme}
           tooltipSide="bottom"
         />
+        {windowsChrome && <WindowsWindowControls />}
       </div>
     </header>
   );

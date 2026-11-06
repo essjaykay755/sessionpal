@@ -19,6 +19,7 @@ import {
 } from "@phosphor-icons/react";
 import { AGENTS, AGENT_CLASS, AGENT_ORDER, agentList, backupCoverage } from "../lib/agents";
 import { MODELS, type ModelInfo } from "../lib/pricing";
+import { livePricesUpdatedAt } from "../lib/live-pricing";
 import { useApp } from "../lib/store";
 import type { AgentId, BackupRecord, ExportFormat, SessionSummary } from "../lib/types";
 import { bytes, cn, compact, filenameStamp, fullDate, money, number, relativeTime } from "../lib/utils";
@@ -951,16 +952,15 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
               <EstimatedTag />
             </div>
             <p className="mt-1 text-12 leading-relaxed text-muted">
-              Estimates use standard short-context API rates. Subscription usage, discounts,
-              long-context rates and other adjustments are not included, and cache writes use the
-              shortest standard duration.
+              Estimates use current short-context API rates, including paid equivalents of recognized free models. Rates refresh from models.dev and may differ by provider. Missing cache rates use the input rate. Subscription usage, discounts and long-context rates are not included.
             </p>
+            <p className="mt-1 text-11 text-faint">{livePricesUpdatedAt() ? `Price data last updated: ${livePricesUpdatedAt()}.` : "Using bundled fallback prices until model prices are available."}</p>
           </div>
         </div>
 
         <section>
           <div className="mb-2 flex items-baseline justify-between px-1">
-            <h3 className="text-12 font-semibold text-fg">List prices</h3>
+            <h3 className="text-12 font-semibold text-fg">Bundled fallback prices</h3>
             <span className="text-11 text-faint">USD per million tokens</span>
           </div>
           <div className="overflow-hidden rounded-[16px] border border-line/[0.075]">
@@ -1003,7 +1003,7 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
                             className="h-2 w-2 shrink-0 rounded-full"
                             style={{ backgroundColor: model.color }}
                           />
-                          <span className="truncate font-medium text-fg/85">{model.label}</span>
+                          <span className="truncate font-medium text-fg/85">{model.label}{model.id === "claude-haiku-5-5" ? "*" : ""}</span>
                         </div>
                       </td>
                       <Price value={model.input} />
@@ -1016,6 +1016,7 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
               ))}
             </table>
           </div>
+          <p className="mt-2 px-1 text-11 text-faint">* Claude Haiku 5.5 estimates use base rates for prompts up to 100,000 tokens. Longer prompts have higher rates that are not included.</p>
         </section>
 
         <section>
@@ -1132,6 +1133,7 @@ function PrivacyDialog({ open, onClose }: { open: boolean; onClose: () => void }
               <li>Read-only access to Cursor, OpenCode and Antigravity databases.</li>
               <li>Your local backup folder, only when you ask.</li>
               <li>Appearance and path preferences in local storage.</li>
+              <li>Public GitHub release information when checking for updates. Automatic checks can be disabled in Settings.</li>
             </ul>
           </div>
           <div className="rounded-[15px] border border-line/[0.075] bg-raised p-4">
@@ -1141,7 +1143,7 @@ function PrivacyDialog({ open, onClose }: { open: boolean; onClose: () => void }
             </div>
             <ul className="mt-2.5 space-y-2 text-11 leading-relaxed text-muted">
               <li>Upload conversations, prompts, or code.</li>
-              <li>Create an account or phone home.</li>
+              <li>Create an account or send analytics.</li>
               <li>Send notifications or schedule background jobs.</li>
               <li>Write to another app's database.</li>
             </ul>

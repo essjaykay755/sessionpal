@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowRight,
@@ -25,6 +25,7 @@ import type { AgentDetection, AgentId, FolderAccess } from "../lib/types";
 import { cn, number } from "../lib/utils";
 import { AgentMark, BrandMark } from "./Brand";
 import { Button, Switch } from "./ui";
+import { WindowsWindowControls } from "./WindowsWindowControls";
 
 type Step = "welcome" | "detecting" | "agents" | "reading" | "folders" | "finishing";
 
@@ -37,6 +38,10 @@ export function Onboarding({ onPreviewDone }: { onPreviewDone?: () => void }) {
   const { completeOnboarding, detections: storeDetections, notify } = useApp();
   const preview = !isTauri;
   const [step, setStep] = useState<Step>("welcome");
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [step]);
   const [detections, setDetections] = useState<AgentDetection[]>([]);
   const [selected, setSelected] = useState<AgentId[]>([]);
   const [cwds, setCwds] = useState<string[]>([]);
@@ -133,10 +138,13 @@ export function Onboarding({ onPreviewDone }: { onPreviewDone?: () => void }) {
   );
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-y-auto bg-canvas">
-      <div data-tauri-drag-region className="h-12 shrink-0" />
-      <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center px-6 pb-12">
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-canvas">
+      <div data-tauri-drag-region className="flex h-12 shrink-0 justify-end">
+        {isTauri && platform() === "windows" && <WindowsWindowControls />}
+      </div>
+      <div className="mx-auto flex min-h-0 w-full max-w-[560px] flex-1 flex-col px-6 pt-[clamp(24px,7vh,64px)]">
         <StepDots step={step} />
+        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto pb-12">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={step === "detecting" ? "welcome" : step === "finishing" ? "reading" : step}
@@ -383,6 +391,7 @@ export function Onboarding({ onPreviewDone }: { onPreviewDone?: () => void }) {
             )}
           </motion.div>
         </AnimatePresence>
+        </div>
       </div>
     </div>
   );

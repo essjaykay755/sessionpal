@@ -406,7 +406,7 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
                 builder.usage.cache_read = builder.usage.cache_read.saturating_add(meta.cache_read);
                 builder.usage.cache_write =
                     builder.usage.cache_write.saturating_add(meta.cache_write);
-                let cost = pricing::estimate(
+                let cost = pricing::estimate_opencode(
                     &canonical,
                     meta.input,
                     meta.output,

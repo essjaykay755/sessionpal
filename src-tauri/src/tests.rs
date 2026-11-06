@@ -163,6 +163,24 @@ fn parses_opencode_storage() {
 }
 
 #[test]
+fn opencode_free_model_uses_paid_equivalent_in_both_storage_formats() {
+    let dir = TempDir::new().unwrap();
+    let storage = dir.path().join("storage");
+    write(&storage.join("session/p1/free.json"), r#"{"id":"free","projectID":"p1","title":"Free"}"#);
+    write(&storage.join("message/free/m1.json"), r#"{"id":"m1","role":"assistant","modelID":"deepseek-v4.1-flash-free","tokens":{"input":100,"output":50}}"#);
+    let sessions = opencode::scan(&[storage]);
+    assert_eq!(sessions[0].usage.as_ref().unwrap().cost, Some(0.0001));
+
+    let db = opencode_fixture(dir.path());
+    let connection = Connection::open(&db).unwrap();
+    connection.execute("UPDATE session_v2 SET model = ?1, cost = 0 WHERE id = 'ses_new'", [r#"{"id":"deepseek-v4.1-flash-free","providerID":"opencode"}"#]).unwrap();
+    drop(connection);
+    let sessions = opencode::scan(&[db]);
+    let session = sessions.iter().find(|session| session.id == "ses_new").unwrap();
+    assert_eq!(session.usage.as_ref().unwrap().cost, Some(0.0008));
+}
+
+#[test]
 fn reads_cursor_database_without_writing() {
     let temp = TempDir::new().unwrap();
     let db = temp.path().join("state.vscdb");
@@ -987,13 +1005,17 @@ fn codex_usage_is_split_by_the_day_it_happened() {
 
 #[test]
 fn pricing_catalog_is_shared_and_complete() {
-    assert_eq!(crate::pricing::catalog_len(), 17);
+    assert_eq!(crate::pricing::catalog_len(), 19);
     // Dated snapshots resolve to their base model; unknown models stay unpriced.
     assert_eq!(
         crate::pricing::estimate("claude-sonnet-4-5-20250929", 1_000_000, 0, 0, 0),
         Some(3.0)
     );
     assert_eq!(crate::pricing::estimate("some-unknown-model", 1, 1, 1, 1), None);
+    assert_eq!(crate::pricing::estimate("claude-haiku-5-5", 1_000_000, 0, 0, 0), Some(0.1));
+    assert_eq!(crate::pricing::estimate_opencode("deepseek-v4.1-flash-free", 1_000_000, 0, 0, 0), Some(0.3));
+    assert_eq!(crate::pricing::estimate_opencode("deepseek-v4.1-flash", 100, 100, 100, 100), None);
+    assert_eq!(crate::pricing::estimate("future-model-free", 100, 100, 100, 100), None);
 }
 
 fn project_session(cwd: &str, project: &str, label: &str) -> crate::models::SessionSummary {

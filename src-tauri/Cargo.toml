@@ -1,6 +1,6 @@
 [package]
 name = "sessionpal"
-version = "0.4.2"
+version = "0.5.0"
 description = "A local-first desktop library for AI coding agent sessions."
 authors = ["Subhojit Karmakar"]
 homepage = "https://sessionpal.app"
@@ -29,6 +29,8 @@ walkdir = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 trash = "5"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [dev-dependencies]
 tempfile = "3"

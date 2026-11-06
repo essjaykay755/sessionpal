@@ -248,7 +248,7 @@ fn summarize(connection: &Connection, db: &Path, row: &SessionRow) -> SessionSum
     usage.cost = model
         .as_deref()
         .and_then(|model| {
-            pricing::estimate(model, usage.input, usage.output, usage.cache_read, usage.cache_write)
+            pricing::estimate_opencode(model, usage.input, usage.output, usage.cache_read, usage.cache_write)
         })
         .or((row.cost > 0.0).then_some(row.cost))
         .map(|cost| (cost * 10_000.0).round() / 10_000.0);

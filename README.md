@@ -56,8 +56,9 @@ prompts. The browser preview can show the setup screens at
 
 ## Privacy and safety
 
-- Nothing is uploaded. There is no remote API, analytics, crash reporting or
-  update check in the app.
+- Conversations are never uploaded. There is no analytics or crash reporting.
+  SessionPal checks GitHub Releases for updates on launch and every six hours
+  while open; turn this off in Settings → General. Manual checks are available there.
 - The browser preview uses deterministic sample data and labels itself as such.
 - All destructive actions happen only in the desktop app, after confirmation.
 - Conversation search keeps a copy of what you and the agents wrote in an
@@ -114,8 +115,8 @@ Six pages share the same warm paper workspace and charcoal icon rail:
 - **Settings** — appearance, motion, export defaults, diagnostics and paths.
 
 Light, dark and system themes are included, with keyboard navigation, a command
-palette (`⌘K` / `Ctrl+K`). The desktop window uses the platform's native window
-controls; on macOS the title bar is transparent and overlays the app.
+palette (`⌘K` / `Ctrl+K`). macOS keeps its native traffic-light controls in an
+overlay title bar. Windows uses integrated caption buttons at the upper right.
 
 ## Development
 
@@ -198,9 +199,13 @@ The real path is resolved at runtime and shown in **Settings** and **Backups**.
 
 ## Cost estimates
 
-Prices live in a single catalog, `src/lib/pricing-catalog.json`, read by both
-the frontend and the Rust backend, so the two can never disagree. Each model
-records its source; update `verifiedAt` when you re-check the published rates. SessionPal does not know your subscription, credits, or provider
+SessionPal refreshes public model rates from models.dev at most daily and caches
+them locally. The request sends no session data. Offline, it uses the last cached
+catalog and the bundled `src/lib/pricing-catalog.json` as a fallback. Free model
+IDs are matched only to a corresponding paid offering listed by the same provider;
+ambiguous or unavailable rates remain unpriced. Missing cache rates use the input
+rate. Current rates are estimates and may differ from historical or provider bills.
+SessionPal does not know your subscription, credits, or provider
 billing. Every amount shown is an **API-equivalent estimate** and is labelled as
 such in the UI. Cache savings are computed from the same public table.
 
@@ -222,9 +227,15 @@ such in the UI. Cache savings are computed from the same public table.
 ## Contributing
 
 Issues and pull requests are welcome. Please keep the privacy model intact:
-new features must work locally, avoid background network access, and never add
+new features must work locally, keep network access limited to public pricing and GitHub release updates, and never add
 a destructive action without confirmation and path validation. Run the
 TypeScript build and `cargo test` before opening a pull request.
+
+## Publishing signed updates
+
+Existing installations need to install the first updater-enabled release manually. Subsequent published stable releases can be installed in the app. Release builds require a persistent Tauri updater signing key, separate from platform code signing. Generate it once with `npx tauri signer generate -w <secure-key-path>` and keep a secure backup; losing it prevents existing installations from trusting future updates.
+
+Set the full private key contents as the GitHub Actions secret `TAURI_SIGNING_PRIVATE_KEY`, its password as the secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (empty if none), and the full public key contents as the repository variable `TAURI_UPDATER_PUBLIC_KEY`. Use the same key for every release. The release workflow embeds the public key in builds, signs the update packages, validates that all three platforms are present, and publishes their manifest and installers together. Never commit the private key. Local builds without this release configuration do not have a trusted update key. macOS app bundles must be installed in a writable location such as Applications; ad hoc signing and Windows SmartScreen warnings still apply.
 
 ## Version history
 

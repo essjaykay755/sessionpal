@@ -67,6 +67,8 @@ fn fingerprint(files: &[PathBuf]) -> Fingerprint {
 #[derive(Clone, Serialize, Deserialize)]
 struct Entry {
     fingerprint: Fingerprint,
+    #[serde(default)]
+    pricing_revision: u64,
     summaries: Vec<SessionSummary>,
 }
 
@@ -149,7 +151,7 @@ impl SummaryCache {
         }
         if let Some(state) = self.lock() {
             if let Some(entry) = state.entries.get(key) {
-                if entry.fingerprint == before {
+                if entry.fingerprint == before && entry.pricing_revision == crate::pricing::revision() {
                     return entry.summaries.clone();
                 }
             }
@@ -162,6 +164,7 @@ impl SummaryCache {
                     key.to_path_buf(),
                     Entry {
                         fingerprint: before,
+                        pricing_revision: crate::pricing::revision(),
                         summaries: summaries.clone(),
                     },
                 );
