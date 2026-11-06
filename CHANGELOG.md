@@ -7,6 +7,12 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.5.4] - 2026-11-07
+
+### Fixed
+
+- Keep the session list hidden in focus mode, including after switching conversations, and restore the list when returning from a conversation on a narrow window.
+
 ## [0.5.3] - 2026-11-07
 
 ### Changed

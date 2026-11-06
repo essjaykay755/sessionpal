@@ -337,9 +337,8 @@ export default function SessionsPage() {
       <div className="flex min-h-0 flex-1 gap-3.5">
         <aside
           className={cn(
-            "card flex min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[320px] xl:w-[340px]",
-            focusMode && "hidden",
-            mobileDetail ? "hidden lg:flex" : "flex",
+            "card min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[320px] xl:w-[340px]",
+            focusMode ? "hidden" : mobileDetail ? "hidden lg:flex" : "flex",
           )}
         >
           <div className="shrink-0 space-y-2.5 border-b border-line/[0.065] p-3">
@@ -561,9 +560,10 @@ export default function SessionsPage() {
           ) : busy ? (
             <DetailSkeleton
               session={selected}
-              onBack={() => setMobileDetail(false)}
+              onBack={() => { setFocusMode(false); setMobileDetail(false); }}
               onClear={() => {
                 clearSelection();
+                setFocusMode(false);
                 setMobileDetail(false);
               }}
             />
@@ -587,7 +587,7 @@ export default function SessionsPage() {
                   <div className="flex min-w-0 items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setMobileDetail(false)}
+                      onClick={() => { setFocusMode(false); setMobileDetail(false); }}
                       aria-label="Back to session list"
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-line/[0.05] hover:text-fg lg:hidden"
                     >
