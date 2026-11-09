@@ -244,7 +244,9 @@ Settings → About.
 
 ## Support
 
-If you enjoy SessionPal, you can [buy me a coffee](https://buymeacoffee.com/essjaykay).
+If you enjoy SessionPal, you can support its development:
+
+<a href="https://buymeacoffee.com/essjaykay"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="60"></a>
 
 ## License
 
