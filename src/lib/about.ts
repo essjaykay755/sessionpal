@@ -11,7 +11,7 @@ export const APP_INFO = {
   tagline: "A local-first library for AI coding sessions.",
   developer: "Subhojit Karmakar",
   developerUrl: "https://essjaykay.dev",
-  websiteUrl: "https://sessionpal.app",
+  websiteUrl: "https://sessionpal.essjaykay.dev",
   repositoryUrl: "https://github.com/essjaykay755/sessionpal",
   supportUrl: "https://buymeacoffee.com/essjaykay",
   license: "MIT",

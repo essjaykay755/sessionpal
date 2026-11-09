@@ -6,7 +6,7 @@
   "description": "A local-first desktop library for AI coding agent sessions.",
   "license": "MIT",
   "author": "Subhojit Karmakar (https://essjaykay.dev)",
-  "homepage": "https://sessionpal.app",
+  "homepage": "https://sessionpal.essjaykay.dev",
   "repository": {
     "type": "git",
     "url": "https://github.com/essjaykay755/sessionpal.git"
