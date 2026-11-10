@@ -6,7 +6,9 @@ SessionPal is a local-first desktop library for sessions from **Claude Code, Cod
 
 [**Download for macOS or Windows**](https://github.com/essjaykay755/sessionpal/releases) · [Website](https://sessionpal.essjaykay.dev) · [Development guide](docs/development.md) · [Changelog](CHANGELOG.md)
 
-![SessionPal overview showing session activity, recent conversations, and agents](docs/screenshots/overview.png)
+![SessionPal 0.5.5 overview showing a fictional studio library, activity, and agents](docs/screenshots/overview.png)
+
+*Screenshots show SessionPal 0.5.5 with fictional projects, conversations, usage figures and backups.*
 
 ## Get started
 
@@ -20,13 +22,13 @@ See the [first-launch guide](docs/data-and-privacy.md#first-launch) for folder p
 
 Search titles, projects, models, and conversation text across your agents. Filter by agent or project, then read messages, code, tool calls, and results in the transcript reader. Export individual sessions or a selection as Markdown or JSON.
 
-![Sessions list and conversation transcript](docs/screenshots/sessions.png)
+![Sessions list and Lunar Orchard sample conversation with Conversation and Details tabs](docs/screenshots/sessions.png)
 
 ## Understand your usage
 
 Explore tokens by time, project, model, and agent. See cache savings and estimated API-equivalent costs based on public model rates. These are **estimates, not bills**; subscription pricing and credits aren’t included.
 
-![Usage dashboard with token chart and cost estimates](docs/screenshots/usage.png)
+![Usage dashboard with four aligned summary cards, rounded section tabs, and token and cost charts](docs/screenshots/usage.png)
 
 [How cost estimates work](docs/data-and-privacy.md#cost-estimates)
 
@@ -34,13 +36,13 @@ Explore tokens by time, project, model, and agent. See cache savings and estimat
 
 Create portable ZIP archives with a manifest and session index, or import an existing archive. Restores validate and stage archive contents, then write only missing files; existing files are never overwritten. Database-backed sessions are archived for inspection and export but aren’t restored into live agent databases.
 
-![Backups page showing local archives](docs/screenshots/backups.png)
+![Backups page showing fictional archive coverage and storage](docs/screenshots/backups.png)
 
 ## Manage storage
 
 See storage by agent and select supported file-based sessions for cleanup. Deletion requires confirmation, validates paths, and moves files to the Trash or Recycle Bin. Database-backed sessions remain read-only.
 
-![Management page showing storage by agent and session cleanup](docs/screenshots/manage.png)
+![Management page showing fictional sessions, filters, storage, and read-only database records](docs/screenshots/manage.png)
 
 ## Supported agents
 
@@ -70,7 +72,7 @@ Choose light, dark, or system appearance, reduce motion if you prefer, and use t
 <details>
 <summary>See Settings</summary>
 
-![Settings page showing appearance and application preferences](docs/screenshots/settings.png)
+![Settings page showing rounded section tabs, appearance, and application preferences](docs/screenshots/settings.png)
 
 </details>
 
