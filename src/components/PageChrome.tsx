@@ -21,18 +21,20 @@ export function PageHeader({
   actions,
   className,
   bottom,
+  titleClassName,
 }: {
   title: ReactNode;
   subtitle: ReactNode;
   actions?: ReactNode;
   className?: string;
   bottom?: ReactNode;
+  titleClassName?: string;
 }) {
   return (
     <div className={cn("mb-4", className)}>
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div className="min-w-0">
-          <h1 className="text-28 font-bold leading-tight tracking-[-0.03em] text-fg">{title}</h1>
+          <h1 className={cn("text-28 font-bold leading-tight tracking-[-0.03em] text-fg", titleClassName)}>{title}</h1>
           <p className="mt-1 line-clamp-2 max-w-[68ch] text-13 leading-snug text-muted">{subtitle}</p>
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -63,6 +65,14 @@ export function SectionTitle({
   );
 }
 
+/** Shared styling for in-page navigation and detail tabs. */
+export function sectionTabClass(active: boolean) {
+  return cn(
+    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-13 font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500",
+    active ? "bg-line/[0.07] text-fg" : "text-muted hover:bg-line/[0.035] hover:text-fg",
+  );
+}
+
 /** In-page navigation that keeps the main sidebar focused on top-level areas. */
 export function SectionNav<T extends string>({
   label,
@@ -78,7 +88,7 @@ export function SectionNav<T extends string>({
   idPrefix: string;
 }) {
   return (
-    <nav aria-label={label} className="mb-5 flex flex-wrap gap-1 border-b border-line/[0.08]">
+    <nav aria-label={label} className="mb-5 flex flex-wrap gap-1.5">
       {options.map((option) => (
         <button
           key={option.value}
@@ -86,12 +96,7 @@ export function SectionNav<T extends string>({
           type="button"
           aria-current={value === option.value ? "page" : undefined}
           onClick={() => onChange(option.value)}
-          className={cn(
-            "-mb-px border-b-2 px-3 py-2.5 text-12 font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500",
-            value === option.value
-              ? "border-copper-500 text-fg"
-              : "border-transparent text-muted hover:text-fg",
-          )}
+          className={sectionTabClass(value === option.value)}
         >
           {option.label}
         </button>

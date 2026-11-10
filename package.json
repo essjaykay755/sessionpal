@@ -1,7 +1,7 @@
 {
   "name": "sessionpal",
   "private": true,
-  "version": "0.5.4",
+  "version": "0.5.5",
   "type": "module",
   "description": "A local-first desktop library for AI coding agent sessions.",
   "license": "MIT",

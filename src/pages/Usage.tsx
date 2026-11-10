@@ -1,14 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  ChartLineUp,
-  Coins,
-  Database,
-  Info,
-} from "@phosphor-icons/react";
+import { ArrowRight, Coins, Info } from "@phosphor-icons/react";
 import { AGENT_CLASS, AGENTS, AGENT_ORDER, TINT_CLASS } from "../lib/agents";
 import {
   agentStats,
@@ -37,7 +29,7 @@ import {
 } from "../lib/utils";
 import { AgentMark } from "../components/Brand";
 import { AreaChart } from "../components/charts";
-import { percentChange, ProjectCostTable } from "../components/ProjectCostTable";
+import { ProjectCostTable } from "../components/ProjectCostTable";
 import { ProjectDetail } from "../components/ProjectDetail";
 import { PageHeader, PageScroll, SectionNav, SectionTitle } from "../components/PageChrome";
 import { AgentBadge, AnimatedNumber, Button, EstimatedTag, Segmented } from "../components/ui";
@@ -65,8 +57,6 @@ export default function UsagePage() {
     () => sessions.filter((session) => overlapsWindow(session, previousWindow)),
     [sessions, previousWindow],
   );
-  const previousTotals = useMemo(() => usageTotals(previous, previousWindow), [previous, previousWindow]);
-  const previousHasUnpricedUsage = previousTotals.pricedSessions < previousTotals.sessionsWithUsage;
   const daily = useMemo(() => dailyUsage(sessions, range), [sessions, range]);
   const undated = useMemo(() => undatedUsageSessions(ranged), [ranged]);
   const agents = useMemo(() => agentStats(ranged, span), [ranged, span]);
@@ -101,9 +91,6 @@ export default function UsagePage() {
         ? "#9cbcc1"
         : "#547983";
 
-  const tokenDelta = percentChange(totals.tokens, previousTotals.tokens);
-  const costDelta = percentChange(totals.cost, previousTotals.cost);
-  const sessionsDelta = percentChange(totals.sessions, previousTotals.sessions);
   const cacheShare = totals.tokens ? (totals.cacheRead / totals.tokens) * 100 : 0;
   const tokenTotal = parts.reduce((sum, part) => sum + part.value, 0) || 1;
 
@@ -111,6 +98,7 @@ export default function UsagePage() {
     <PageScroll>
       <PageHeader
         title="Usage & cost"
+        titleClassName="text-[34px] tracking-[-0.045em]"
         subtitle="Estimated from local session metadata at public API prices."
         actions={
           <>
@@ -147,29 +135,23 @@ export default function UsagePage() {
       {section === "overview" && (
         <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Tokens processed"
-          value={<AnimatedNumber value={totals.tokens} format={compact} />}
-          meta={
-            totals.cacheRead > 0
-              ? `${compact(totals.input + totals.output)} input + output · ${compact(totals.cacheRead + totals.cacheWrite)} cache`
-              : `${number(totals.sessions)} sessions in ${RANGE_LABELS[range].toLowerCase()}`
-          }
-          icon={<ChartLineUp className="h-4 w-4" />}
-          delta={tokenDelta}
+        <UsageSummaryCard
+          label="Token composition"
           tint="sky"
+          value={<AnimatedNumber value={totals.tokens} format={compact} />}
+          meta={`${compact(totals.input)} in · ${compact(totals.output)} out · ${compact(totals.cacheRead)} cache read${totals.cacheWrite ? ` · ${compact(totals.cacheWrite)} cache write` : ""}`}
         />
-        <StatCard
-          label="Estimated API value"
+        <UsageSummaryCard
+          label="API-equivalent spend"
+          tint="peach"
           value={settings.showCosts ? (hasPricedSessions ? <AnimatedNumber value={totals.cost} format={(value) => money(value)} /> : "Unavailable") : "Hidden"}
           meta={settings.showCosts ? (hasUnpricedUsage ? `${totals.pricedSessions} of ${totals.sessionsWithUsage} sessions priced` : "Standard API rates") : "Tap to show estimates"}
-          icon={<Coins className="h-4 w-4" />}
-          delta={settings.showCosts && !hasUnpricedUsage && !previousHasUnpricedUsage ? costDelta : null}
-          tint="peach"
+          estimated={settings.showCosts && hasPricedSessions}
           onClick={!settings.showCosts ? () => updateSettings({ showCosts: true }) : undefined}
         />
-        <StatCard
-          label="Est. cache savings"
+        <UsageSummaryCard
+          label="Prompt cache savings"
+          tint="sage"
           value={
             settings.showCosts && totals.savingsSessions > 0 ? (
               <AnimatedNumber value={totals.cacheSavings} format={(value) => money(value)} />
@@ -177,18 +159,13 @@ export default function UsagePage() {
               settings.showCosts ? "Unavailable" : "Hidden"
             )
           }
-          meta={hasIncompleteSavings ? `${totals.savingsSessions} of ${totals.sessionsWithUsage} sessions priced` : `${pct(cacheShare, 0)} of tokens reused`}
-          icon={<Coins className="h-4 w-4" />}
-          delta={null}
-          tint="sage"
+          meta={!settings.showCosts ? "Estimates are hidden" : hasIncompleteSavings ? `${totals.savingsSessions} of ${totals.sessionsWithUsage} sessions priced` : `${pct(cacheShare, 1)} of total tokens served from cache`}
         />
-        <StatCard
+        <UsageSummaryCard
           label="Sessions"
-          value={<AnimatedNumber value={totals.sessions} format={number} />}
-          meta={`${totals.sessionsWithUsage} include token data`}
-          icon={<Database className="h-4 w-4" />}
-          delta={sessionsDelta}
           tint="butter"
+          value={<AnimatedNumber value={totals.sessions} format={number} />}
+          meta={`${number(totals.sessionsWithUsage)} include token data`}
         />
       </div>
 
@@ -564,56 +541,40 @@ export default function UsagePage() {
   );
 }
 
-function StatCard({
+function UsageSummaryCard({
   label,
   value,
   meta,
-  icon,
-  delta,
+  estimated,
   tint,
   onClick,
 }: {
   label: string;
   value: ReactNode;
   meta: string;
-  icon: ReactNode;
-  delta: number | null;
+  estimated?: boolean;
   tint: Tint;
   onClick?: () => void;
 }) {
   const content = (
     <>
-      <span className="flex min-w-0 items-center gap-1.5 text-12 font-medium text-[var(--tint-ink)]/70">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] bg-white/40 text-[var(--tint-ink)]/70 dark:bg-white/[0.055]">
-          {icon}
-        </span>
-        <span className="truncate">{label}</span>
-      </span>
-      <div className="mt-3 flex items-end justify-between gap-2">
-        <div className="min-w-0 truncate text-24 font-black leading-none tracking-[-0.045em] text-[var(--tint-ink)]">
+      <div className="flex min-h-[2.5em] items-start gap-2 text-13 font-medium leading-snug text-[var(--tint-ink)]">
+        <span className="opacity-80">{label}</span>
+        {estimated && <span className="shrink-0 rounded-md bg-sunken px-1.5 py-0.5 text-11 font-medium text-muted" title="Estimated from public API list prices, not a bill">Est.</span>}
+      </div>
+      <div className="mt-1 flex min-w-0 items-baseline">
+        <div className="min-w-0 break-words text-[28px] font-black leading-none tracking-[-0.045em] text-[var(--tint-ink)]">
           {value}
         </div>
-        {delta !== null && (
-          <span
-            className={cn(
-              "flex shrink-0 items-center gap-0.5 rounded-full bg-white/35 px-1.5 py-0.5 text-11 font-semibold tabular dark:bg-white/[0.06]",
-              delta >= 0 ? "text-success" : "text-danger",
-            )}
-            title="Compared with the previous period"
-          >
-            {delta >= 0 ? <ArrowUp className="h-2 w-2" /> : <ArrowDown className="h-2 w-2" />}
-            {Math.abs(delta).toFixed(0)}%
-          </span>
-        )}
       </div>
-      <div className="mt-1.5 text-11 leading-snug text-[var(--tint-ink)]/65">{meta}</div>
+      <div className="mt-2 text-12 leading-relaxed text-[var(--tint-ink)] opacity-80">{meta}</div>
     </>
   );
-  const className = cn(TINT_CLASS[tint], "relative min-w-0 overflow-hidden rounded-[19px] bg-[var(--tint-bg)] p-4 text-left");
+  const className = cn("card min-w-0 p-5 text-left sm:p-6", TINT_CLASS[tint]);
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={cn(className, "transition-colors")}>
+      <button type="button" onClick={onClick} className={cn(className, "transition-colors hover:border-line/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500")}>
         {content}
       </button>
     );

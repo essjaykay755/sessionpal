@@ -64,7 +64,7 @@ import type {
 } from "./types";
 import { bytes, filenameStamp, money, number, slugify, uid } from "./utils";
 import { loadLivePrices } from "./live-pricing";
-import { setLiveModels } from "./pricing";
+import { setLiveMetadata, setLiveModels } from "./pricing";
 
 const PAGE_IDS: PageId[] = ["overview", "sessions", "usage", "backups", "manage", "settings"];
 const SETTINGS_KEY = "sessionpal.settings.v1";
@@ -367,7 +367,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       setError(null);
       try {
-        const prices = await loadLivePrices();
+        const { prices, metadata } = await loadLivePrices();
+        setLiveMetadata(metadata);
         try {
           await setPricingCatalog(prices);
           setLiveModels(prices);

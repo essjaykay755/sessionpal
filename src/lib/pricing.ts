@@ -4,7 +4,7 @@ import type { UsageBreakdown } from "./types";
 export interface ModelInfo {
   id: string;
   label: string;
-  family: "Anthropic" | "OpenAI" | "Google" | "Cursor" | "Moonshot" | "Alibaba" | "Unknown";
+  family: string;
   color: string;
   input: number;
   output: number;
@@ -29,6 +29,12 @@ export const MODELS: Record<string, ModelInfo> = Object.fromEntries(
 
 export const MODEL_ORDER = Object.keys(MODELS);
 let liveModels: Record<string, ModelInfo> = {};
+export type ModelMetadata = { id: string; label: string; family: string };
+let liveMetadata: Record<string, ModelMetadata> = {};
+
+export function setLiveMetadata(models: ModelMetadata[]): void {
+  liveMetadata = Object.fromEntries(models.map((model) => [model.id, model]));
+}
 
 export function setLiveModels(models: ModelInfo[]): void {
   liveModels = Object.fromEntries(models.map((model) => [model.id, model]));
@@ -69,20 +75,16 @@ function readableModelName(id: string): string {
   return words.join(" ");
 }
 
-function familyFor(id: string): ModelInfo["family"] {
-  if (id.startsWith("claude-")) return "Anthropic";
-  if (id.startsWith("gpt-") || /^o\d/.test(id)) return "OpenAI";
-  if (id.startsWith("gemini-") || id.startsWith("gemma-")) return "Google";
-  return "Unknown";
-}
-
 export function modelInfo(id: string | null | undefined): ModelInfo {
   const known = knownModelInfo(id);
-  if (known) return known;
+  const metadata = id ? liveMetadata[id] ?? liveMetadata[id.replace(/-\d{8}$/, "")] : undefined;
+  if (known) {
+    return metadata ? { ...known, family: metadata.family } : known;
+  }
   return {
     id: id ?? "unknown",
-    label: id ? readableModelName(id) : "Unknown model",
-    family: id ? familyFor(id) : "Unknown",
+    label: metadata?.label ?? (id ? readableModelName(id) : "Unknown model"),
+    family: metadata?.family ?? "Unknown",
     color: "#8d8477",
     input: 0,
     output: 0,

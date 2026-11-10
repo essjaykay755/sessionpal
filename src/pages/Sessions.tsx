@@ -55,6 +55,7 @@ import {
 } from "../lib/utils";
 import { AgentMark, BrandMark } from "../components/Brand";
 import { projectIcon } from "../components/icons";
+import { sectionTabClass } from "../components/PageChrome";
 import {
   AgentBadge,
   Button,
@@ -660,7 +661,7 @@ export default function SessionsPage() {
                   )}
                 </div>
 
-                <div className="no-scrollbar mt-3 flex items-end gap-1 overflow-x-auto">
+                <div className="no-scrollbar mt-3 flex items-center gap-1.5 overflow-x-auto pb-3">
                   <TabButton
                     active={tab === "conversation"}
                     onClick={() => setTab("conversation")}
@@ -675,7 +676,7 @@ export default function SessionsPage() {
                   >
                     Details
                   </TabButton>
-                  <div className="ml-auto flex items-center pb-1.5">
+                  <div className="ml-auto flex items-center">
                     <IconButton icon={<Copy className="h-4 w-4" />} label="Copy transcript" onClick={copyTranscript} tooltipSide="bottom" />
                   </div>
                 </div>
@@ -733,20 +734,10 @@ function TabButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={cn(
-        "relative flex items-center gap-1.5 px-2.5 pb-2.5 pt-1 text-12 font-medium transition-colors",
-        active ? "text-fg" : "text-faint hover:text-muted",
-      )}
+      className={sectionTabClass(active)}
     >
       {icon}
       {children}
-      {active && (
-        <motion.span
-          layoutId="session-tab"
-          transition={{ type: "spring", stiffness: 480, damping: 36 }}
-          className="absolute inset-x-1.5 -bottom-px h-[2px] rounded-full bg-fg"
-        />
-      )}
     </button>
   );
 }

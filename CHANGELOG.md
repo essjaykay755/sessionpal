@@ -7,6 +7,17 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.5.5] - 2026-11-11
+
+### Changed
+
+- Refined the Usage & cost dashboard with four aligned summary cards and the original metric color tones.
+- Applied consistent rounded section tabs across Usage, Settings, and session details.
+
+### Fixed
+
+- Identify model creators using current catalog metadata, including newly listed models, while leaving ambiguous matches unknown.
+
 ## [0.5.4] - 2026-11-07
 
 ### Fixed
