@@ -1020,6 +1020,7 @@ fn pricing_catalog_is_shared_and_complete() {
 
 fn project_session(cwd: &str, project: &str, label: &str) -> crate::models::SessionSummary {
     crate::models::SessionSummary {
+        timing: None,
         id: format!("{cwd}-{project}"),
         agent: AgentId::Claude,
         title: String::new(),
@@ -1363,4 +1364,85 @@ fn search_returns_every_matching_conversation() {
     assert_eq!(hits.iter().find(|hit| hit.id == "s0").unwrap().matches, 5000);
     assert!(hits.iter().all(|hit| hit.snippet.contains("\u{1}deploy\u{2}")));
     assert_eq!(search::search_in(&index, "deploy", Some(5)).unwrap().len(), 5);
+}
+
+#[test]
+fn codex_timing_summary_and_detail_agree_without_counting_admin_events() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("sessions/timing.jsonl");
+    let lines = [
+        serde_json::json!({"type":"session_meta","timestamp":"2026-11-01T00:00:00Z","payload":{"id":"timing","cwd":"/tmp/timing"}}),
+        serde_json::json!({"type":"event_msg","timestamp":"2026-11-05T09:00:00Z","payload":{"type":"task_started","turn_id":"t"}}),
+        serde_json::json!({"type":"event_msg","timestamp":"2026-11-05T09:00:05Z","payload":{"type":"task_complete","turn_id":"t","duration_ms":5000,"time_to_first_token_ms":250}}),
+    ];
+    write(&file, &lines.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"));
+    let scanned = codex::scan(&[temp.path().join("sessions")]);
+    let detail = codex::detail(&file).unwrap();
+    let timing = scanned[0].timing.as_ref().unwrap();
+    assert_eq!(timing.elapsed_ms, Some(5000));
+    assert_eq!(timing.entries.len(), 1);
+    assert_eq!(serde_json::to_value(&detail.summary.timing).unwrap(), serde_json::to_value(&scanned[0].timing).unwrap());
+}
+
+#[test]
+fn opencode_file_timing_is_explicit_and_reparsed_after_source_changes() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("storage");
+    let session = root.join("session/p/s.json");
+    let message = root.join("message/s/m.json");
+    write(&session, r#"{"id":"s","projectID":"p","time":{"created":1793823026000,"updated":1793823036000}}"#);
+    write(&message, r#"{"id":"m","role":"assistant","time":{"created":1793823026000}}"#);
+    let initial = opencode::scan(&[root.clone()]);
+    assert!(initial[0].timing.as_ref().unwrap().entries.is_empty());
+    write(&message, r#"{"id":"m","role":"assistant","time":{"created":1793823026000,"completed":1793823036000}}"#);
+    let rescanned = opencode::scan(&[root]);
+    let timing = rescanned[0].timing.as_ref().unwrap();
+    assert_eq!(timing.entries[0].kind, "response");
+    assert_eq!(timing.entries[0].duration_ms, 10000);
+    assert_eq!(serde_json::to_value(&opencode::detail(&session).unwrap().summary.timing).unwrap(), serde_json::to_value(timing).unwrap());
+}
+
+#[test]
+fn opencode_both_database_schemas_preserve_response_timing() {
+    use crate::agents::opencode_db;
+    let temp = TempDir::new().unwrap();
+    let db = opencode_fixture(temp.path());
+    let connection = Connection::open(&db).unwrap();
+    connection.execute("UPDATE session_message SET data = json_set(data, '$.time.created', 1793823027000, '$.time.completed', 1793823032000) WHERE id = 'm2'", []).unwrap();
+    connection.execute("INSERT INTO message VALUES ('om2', 'ses_old', 1787296680000, 1787296685000, ?1)", [r#"{"role":"assistant","time":{"created":1787296680000,"completed":1787296685000}}"#]).unwrap();
+    connection.execute("INSERT INTO part VALUES ('op2', 'om2', 'ses_old', 1787296680000, 1787296685000, ?1)", [r#"{"type":"text","text":"Done"}"#]).unwrap();
+    for session in opencode_db::scan(&db) {
+        let timing = session.timing.as_ref().unwrap();
+        assert_eq!(timing.entries.len(), 1);
+        assert_eq!(timing.entries[0].duration_ms, 5000);
+        assert_eq!(timing.entries[0].kind, "response");
+        assert_eq!(serde_json::to_value(&opencode_db::detail(&db, &session.id).unwrap().summary.timing).unwrap(), serde_json::to_value(timing).unwrap());
+    }
+}
+
+#[test]
+fn cursor_timing_never_uses_composer_fallback_or_synthetic_bubbles() {
+    let temp = TempDir::new().unwrap();
+    let db = temp.path().join("state.vscdb");
+    cursor_fixture(&db);
+    let connection = Connection::open(&db).unwrap();
+    connection.execute("UPDATE cursorDiskKV SET value = json_remove(value, '$.createdAt') WHERE key LIKE 'bubbleId:%'", []).unwrap();
+    assert!(cursor::scan(&[db.clone()])[0].timing.is_none());
+    connection.execute("UPDATE cursorDiskKV SET value = json_set(value, '$.createdAt', 1760000010000, '$.synthetic', json('true')) WHERE key LIKE 'bubbleId:%'", []).unwrap();
+    assert!(cursor::scan(&[db.clone()])[0].timing.is_none());
+    connection.execute("UPDATE cursorDiskKV SET value = json_remove(value, '$.synthetic') WHERE key LIKE 'bubbleId:%'", []).unwrap();
+    let sessions = cursor::scan(&[db]);
+    assert_eq!(sessions[0].timing.as_ref().unwrap().event_count, 1);
+    assert_eq!(sessions[0].timing.as_ref().unwrap().elapsed_ms, None);
+}
+
+#[test]
+fn claude_undated_and_injected_messages_do_not_use_file_times() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("undated.jsonl");
+    write(&file, concat!(
+        r#"{"type":"user","uuid":"u","message":{"content":"hello"}}"#, "\n",
+        r#"{"type":"user","uuid":"ctx","timestamp":"2026-11-05T09:00:00Z","message":{"content":"<environment_context>injected</environment_context>"}}"#,
+    ));
+    assert!(claude::detail(&file).unwrap().summary.timing.is_none());
 }

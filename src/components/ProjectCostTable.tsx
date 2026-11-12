@@ -1,3 +1,4 @@
+import { ACTIVE_TIME_HELP, timingCoverage, timingDuration } from "../lib/timing";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, CaretDown, CaretUp } from "@phosphor-icons/react";
 import { AGENT_CLASS, AGENTS, TINT_CLASS } from "../lib/agents";
@@ -9,7 +10,7 @@ import { Sparkline } from "./charts";
 import { projectIcon } from "./icons";
 import { Button, EstimatedTag, SearchInput, Tooltip } from "./ui";
 
-type SortKey = "label" | "sessions" | "tokens" | "cost" | "change";
+type SortKey = "label" | "sessions" | "tokens" | "cost" | "time" | "change";
 
 const PAGE_SIZE = 10;
 
@@ -72,6 +73,8 @@ export function ProjectCostTable({
           return row.project.sessions;
         case "tokens":
           return row.project.tokens;
+        case "time":
+          return row.project.timing.activeMs ?? -1;
         case "cost":
           return row.project.cost;
         case "change":
@@ -79,6 +82,10 @@ export function ProjectCostTable({
       }
     };
     return withChange.sort((a, b) => {
+      if (activeSort.key === "time") {
+        if (a.project.timing.activeMs === null && b.project.timing.activeMs !== null) return 1;
+        if (b.project.timing.activeMs === null && a.project.timing.activeMs !== null) return -1;
+      }
       const left = value(a);
       const right = value(b);
       if (left < right) return -direction;
@@ -109,13 +116,13 @@ export function ProjectCostTable({
 
   const partialCount = projects.filter((project) => !project.costComplete).length;
   const columns =
-    "grid-cols-[minmax(0,1fr)_64px_76px] sm:grid-cols-[minmax(0,1fr)_56px_64px_76px_64px] lg:grid-cols-[minmax(0,1fr)_76px_56px_64px_76px_92px_96px_60px]";
+    "grid-cols-[minmax(0,1fr)_88px] sm:grid-cols-[minmax(0,1fr)_48px_56px_64px_88px_52px] lg:grid-cols-[minmax(0,1fr)_88px_48px_56px_64px_88px_80px_52px] xl:grid-cols-[minmax(0,1fr)_88px_48px_56px_64px_88px_80px_80px_52px]";
 
   return (
     <section id="projects" className="card mt-3.5 overflow-hidden">
       <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-5 sm:px-6">
         <div>
-          <h2 className="text-16 font-bold tracking-[-0.03em]">Cost by project</h2>
+          <h2 className="text-16 font-bold tracking-[-0.03em]">Usage by project</h2>
           <p className="mt-1 text-11 text-muted">
             {number(projects.length)} {projects.length === 1 ? "project" : "projects"} ·{" "}
             {rangeLabel} · worktrees and subfolders count toward their repository
@@ -139,15 +146,17 @@ export function ProjectCostTable({
         <SortHeader label="Project" sortKey="label" sort={activeSort} onSort={toggleSort} />
         <span className="hidden lg:block">Agents</span>
         <SortHeader label="Sessions" sortKey="sessions" sort={activeSort} onSort={toggleSort} align="right" responsive />
-        <SortHeader label="Tokens" sortKey="tokens" sort={activeSort} onSort={toggleSort} align="right" />
+        <SortHeader label="Tokens" sortKey="tokens" sort={activeSort} onSort={toggleSort} align="right" responsive />
         <SortHeader
           label={showCosts ? "Est. cost" : "Cost"}
           sortKey="cost"
+          responsive
           sort={activeSort}
           onSort={toggleSort}
           align="right"
         />
-        <span className="hidden text-right lg:block">Share</span>
+        <SortHeader label="Est. active time" sortKey="time" sort={activeSort} onSort={toggleSort} align="right" />
+        <span className="hidden text-right xl:block">Share</span>
         <span className="hidden text-right lg:block">Trend</span>
         <SortHeader label="Change" sortKey="change" sort={activeSort} onSort={toggleSort} align="right" responsive />
       </div>
@@ -204,8 +213,8 @@ export function ProjectCostTable({
               <div className="hidden text-right text-11 tabular text-muted sm:block">
                 {number(project.sessions)}
               </div>
-              <div className="text-right text-11 tabular text-muted">{compact(project.tokens)}</div>
-              <div className="text-right text-11 tabular text-fg/85">
+              <div className="hidden text-right text-11 tabular text-muted sm:block">{compact(project.tokens)}</div>
+              <div className="hidden text-right text-11 tabular text-fg/85 sm:block">
                 {!showCosts ? (
                   "—"
                 ) : project.pricedSessions === 0 ? (
@@ -224,7 +233,11 @@ export function ProjectCostTable({
                   </span>
                 )}
               </div>
-              <div className="hidden items-center justify-end gap-2 lg:flex">
+              <div className="text-right text-11 tabular text-fg/85" title={`${ACTIVE_TIME_HELP} ${timingCoverage(project.timing)}`}>
+                {timingDuration(project.timing.activeMs)}
+                {project.timing.activeMs !== null && project.timing.coveredSessions < project.timing.totalSessions && <span className="ml-0.5 text-copper-500">*</span>}
+              </div>
+              <div className="hidden items-center justify-end gap-2 xl:flex">
                 <span className="h-1.5 w-10 overflow-hidden rounded-full bg-line/[0.06]">
                   <span
                     className="block h-full rounded-full"
@@ -273,7 +286,7 @@ export function ProjectCostTable({
             {partialCount > 0 && showCosts
               ? "* Some of the project's sessions could not be priced, so its cost is a lower bound. Change is shown only when both periods are fully priced. "
               : ""}
-            Usage inside the selected period only.
+            Usage inside the selected period only. Active time excludes gaps over 15 minutes; * marks partial timing coverage.
           </span>
         </span>
         {!query && rows.length > PAGE_SIZE && (

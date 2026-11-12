@@ -547,6 +547,7 @@ fn summarize(loaded: &Loaded, index: &Path, row: &Row, segments: &[Segment]) -> 
         .unwrap_or_else(|| updated.clone());
 
     SessionSummary {
+        timing: None, // This source exposes no per-message timestamps.
         id: row.id.clone(),
         agent: AgentId::Antigravity,
         title,

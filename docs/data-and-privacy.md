@@ -97,6 +97,33 @@ SessionPal does not know your subscription, credits, or provider
 billing. Every amount shown is an **API-equivalent estimate** and is labelled as
 such in the UI. Cache savings are computed from the same public table.
 
+## Timing
+
+Estimated active time counts gaps of 15 minutes or less between genuine recorded
+activity events. Longer gaps are excluded entirely. Overlapping sessions within
+a repository count once, including linked worktrees. Period totals are clipped
+to the selected local calendar days; lifetime totals use all recorded sessions.
+This estimates AI-session activity, rather than all work in your editor.
+
+Session elapsed time spans the first and last genuine activity timestamps,
+including breaks. Administrative records, injected context, and timestamps
+inferred from file metadata do not contribute to timing. Fewer than two usable
+activity timestamps means active and elapsed time are unavailable. Coverage
+shows how many sessions have sufficient timing data; partial totals exclude
+unavailable sessions.
+
+Codex completion events can supply turn duration and time to first token.
+OpenCode messages can supply response duration from explicit creation and
+completion timestamps. These durations may include tools and other agent work.
+Interrupted and failed observations remain visible in session details but are
+excluded from completed-duration averages. Each timing kind is averaged
+separately, with its sample count; period averages use completion dates.
+API request latency is never inferred from chat timestamps. Sources without
+explicit API timing show it as unavailable. The current Antigravity reader
+exposes no per-message timestamps and therefore has no usable timing data.
+Timing is calculated locally from existing files and read-only database access;
+SessionPal does not intercept requests or change agent settings.
+
 ## Limitations
 
 - Session formats are unofficial and can change between agent releases. Parsers

@@ -1,3 +1,4 @@
+import { timingStats, type TimingStats } from "./timing";
 import { AGENT_ORDER, AGENTS } from "./agents";
 import { cacheSavings, knownModelInfo, modelInfo, usageTokens } from "./pricing";
 import type {
@@ -405,6 +406,8 @@ export function projectName(session: SessionSummary): string {
 }
 
 export interface ProjectCostStat {
+  timing: TimingStats;
+  lifetimeTiming: TimingStats;
   key: string;
   label: string;
   /** Display path of the repository, or empty when unknown. */
@@ -433,9 +436,17 @@ export interface ProjectCostStat {
  * Usage and estimated cost per project. With a window, only usage inside it
  * counts, so totals match the page-level figures for the same period.
  */
-export function projectCostStats(sessions: SessionSummary[], window?: DayWindow): ProjectCostStat[] {
+export function projectCostStats(sessions: SessionSummary[], window?: DayWindow, lifetimeSessions = sessions): ProjectCostStat[] {
+  const lifetimeGroups = new Map<string, SessionSummary[]>();
+  for (const session of lifetimeSessions) {
+    const key = projectKey(session);
+    const group = lifetimeGroups.get(key);
+    if (group) group.push(session);
+    else lifetimeGroups.set(key, [session]);
+  }
   const groups = new Map<string, SessionSummary[]>();
   for (const session of sessions) {
+    if (window && !overlapsWindow(session, window)) continue;
     const key = projectKey(session);
     const group = groups.get(key);
     if (group) group.push(session);
@@ -453,6 +464,8 @@ export function projectCostStats(sessions: SessionSummary[], window?: DayWindow)
       modelTokens.set(label, (modelTokens.get(label) ?? 0) + usageTokens(usageInWindow(session, window)));
     }
     stats.push({
+      timing: timingStats(members, window),
+      lifetimeTiming: timingStats(lifetimeGroups.get(key) ?? members),
       key,
       label: projectName(first),
       path: first.projectRoot ?? "",

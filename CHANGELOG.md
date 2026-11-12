@@ -7,6 +7,26 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.6.0] - 2026-11-12
+
+Measure recorded AI-session activity across your projects.
+
+### Added
+
+- Estimated active time by project, with sortable period totals, lifetime totals, first and last recorded activity, and timing coverage. Gaps over 15 minutes are excluded and overlapping sessions within a repository count once.
+- Session timing details with elapsed and estimated active time, recorded Codex turn durations and time to first token, and OpenCode response durations where available.
+- Completed-duration averages with separate sample counts for each timing kind. Interrupted and failed observations remain visible in session details and are excluded from completed averages.
+
+### Changed
+
+- Renamed the project usage table to Usage by project and kept projects with recorded activity visible even without token usage.
+- Rebuild cached summaries to extract timing from existing local logs and databases. Missing timing stays unavailable; API latency is never inferred from chat timestamps.
+- Updated fictional preview data with recorded, interrupted, partial and unavailable timing examples.
+
+### Fixed
+
+- Keep featured preview conversation timestamps within their session's recorded start and end times.
+
 ## [0.5.5] - 2026-11-11
 
 ### Changed

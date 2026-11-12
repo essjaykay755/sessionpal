@@ -79,9 +79,9 @@ interface RawSession {
 }
 
 function distribute(session: RawSession): SessionDetail {
-  const start = new Date(NOW - session.ageMinutes * MINUTE).getTime();
-  const end = start + session.durationMinutes * MINUTE;
   const summary = featuredSummary(session);
+  const start = Date.parse(summary.createdAt);
+  const end = Date.parse(summary.updatedAt);
   const messages = session.messages.map((message, index) => {
     const ratio = session.messages.length > 1 ? index / (session.messages.length - 1) : 0;
     return {
@@ -101,7 +101,7 @@ function distribute(session: RawSession): SessionDetail {
 function featuredSummary(session: RawSession): SessionSummary {
   const project = projectFromSlug(session.project);
   const created = new Date(
-    new Date(NOW - session.ageMinutes * MINUTE).getTime(),
+    Date.parse(session.updatedAt) - session.durationMinutes * MINUTE,
   ).toISOString();
   return {
     id: session.id,
@@ -112,6 +112,7 @@ function featuredSummary(session: RawSession): SessionSummary {
     projectLabel: project.label,
     cwd: `~/Projects/${project.slug}`,
     branch: session.branch,
+    timing: demoTiming(session.agent, session.id, created, session.updatedAt),
     createdAt: created,
     updatedAt: session.updatedAt,
     messageCount: session.messages.length,
@@ -1028,6 +1029,7 @@ function generateFiller(agent: AgentId, index: number, seedNumber: number): Sess
     projectLabel: project.label,
     cwd: `~/Projects/${project.slug}`,
     branch,
+    timing: demoTiming(agent, id, createdAt, updatedAt),
     createdAt,
     updatedAt,
     messageCount,
@@ -1477,3 +1479,31 @@ export const DEMO_HEALTH = {
 };
 
 export { FEATURED };
+
+/** Fictional timing covers unavailable, single-event, complete and interrupted records. */
+function demoTiming(agent: AgentId, id: string, createdAt: string, updatedAt: string): import("./types").SessionTiming | undefined {
+  const seed = Array.from(id).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  if (agent === "antigravity" || seed % 7 === 0) return undefined;
+  const start = Date.parse(createdAt);
+  const end = Date.parse(updatedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return undefined;
+  const single = seed % 11 === 0;
+  const finish = single ? start : end;
+  const burst = Math.min(10 * MINUTE, (end - start) / 3);
+  const activityIntervals = single ? [] : end - start <= 30 * MINUTE
+    ? [{ startMs: start, endMs: end }]
+    : [{ startMs: start, endMs: start + burst }, { startMs: end - burst, endMs: end }];
+  const kind = agent === "codex" ? "turn" : "response";
+  const entries: import("./types").TimingEntry[] = !single && (agent === "codex" || agent === "opencode")
+    ? [0, 1, 2].map((index) => ({
+      id: `${id}-timing-${index}`, kind,
+      source: agent === "codex" ? "Codex turn event" : "OpenCode message time",
+      timestamp: new Date(end - (2 - index) * burst / 3).toISOString(),
+      durationMs: (12 + (seed + index * 17) % 90) * 1000,
+      status: index === 1 && seed % 2 === 0 ? "interrupted" : "completed",
+      timeToFirstTokenMs: agent === "codex" ? 450 + seed % 1800 : null,
+    })) : [];
+  return { activityIntervals, eventCount: single ? 1 : Math.ceil((end - start) / (5 * MINUTE)) + 1,
+    firstActivity: new Date(start).toISOString(), lastActivity: new Date(finish).toISOString(),
+    elapsedMs: single ? null : end - start, entries };
+}

@@ -1,3 +1,4 @@
+import { ProjectTiming } from "./Timing";
 import { useMemo } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
 import { AGENT_CLASS, AGENTS, TINT_CLASS } from "../lib/agents";
@@ -156,6 +157,8 @@ function DetailBody({
           meta="From cache reads"
         />
       </div>
+
+      <ProjectTiming period={project.timing} lifetime={project.lifetimeTiming} />
 
       <section>
         <h3 className="text-13 font-bold tracking-[-0.02em] text-fg">

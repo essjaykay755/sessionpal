@@ -5,7 +5,6 @@ import { AGENT_CLASS, AGENTS, AGENT_ORDER, TINT_CLASS } from "../lib/agents";
 import {
   agentStats,
   dailyUsage,
-  filterRange,
   modelStats,
   overlapsWindow,
   projectCostStats,
@@ -46,7 +45,7 @@ export default function UsagePage() {
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
 
   const span = useMemo(() => rangeWindow(range), [range]);
-  const ranged = useMemo(() => filterRange(sessions, range), [sessions, range]);
+  const ranged = useMemo(() => sessions.filter((session) => overlapsWindow(session, span)), [sessions, span]);
   const totals = useMemo(() => usageTotals(ranged, span), [ranged, span]);
   const hasUnpricedUsage = totals.pricedSessions < totals.sessionsWithUsage;
   const hasIncompleteSavings = totals.savingsSessions < totals.sessionsWithUsage;
@@ -62,7 +61,7 @@ export default function UsagePage() {
   const agents = useMemo(() => agentStats(ranged, span), [ranged, span]);
   const models = useMemo(() => modelStats(ranged, span), [ranged, span]);
   const parts = useMemo(() => sessionUsageParts(ranged, span), [ranged, span]);
-  const projectCosts = useMemo(() => projectCostStats(ranged, span), [ranged, span]);
+  const projectCosts = useMemo(() => projectCostStats(ranged, span, sessions), [ranged, span, sessions]);
   const previousProjectCosts = useMemo(
     () => projectCostStats(previous, previousWindow),
     [previous, previousWindow],

@@ -7,6 +7,7 @@ mod pricing;
 mod projects;
 mod scan_cache;
 mod search;
+mod timing;
 mod util;
 
 #[cfg(test)]

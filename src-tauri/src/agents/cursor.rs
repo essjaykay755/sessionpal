@@ -146,6 +146,7 @@ struct Bubble {
     role: String,
     text: String,
     timestamp: String,
+    genuine_timestamp: Option<String>,
     model: Option<String>,
     input: u64,
     output: u64,
@@ -281,7 +282,16 @@ fn parse_composer(
         size_bytes = size_bytes.saturating_add(composer_size(connection, &id));
     }
 
+    let mut timing = crate::timing::Collector::default();
     for bubble in &bubbles {
+        if matches!(bubble.role.as_str(), "user" | "assistant")
+            && (!bubble.text.trim().is_empty() || bubble.tool_name.is_some())
+            && !crate::util::is_injected_context(&bubble.text)
+        {
+            if let Some(stamp) = &bubble.genuine_timestamp {
+                timing.activity(&Value::String(stamp.clone()));
+            }
+        }
         earliest = earlier(&earliest, &bubble.timestamp);
         latest = later(&latest, &bubble.timestamp);
         if let Some(model) = &bubble.model {
@@ -376,6 +386,7 @@ fn parse_composer(
 
     Ok(ParsedSession {
         summary: SessionSummary {
+            timing: timing.finish(),
             id,
             agent: AgentId::Cursor,
             title,
@@ -556,11 +567,14 @@ fn parse_bubble(
         .map(str::to_string)
         .or_else(|| value.get("richText").and_then(Value::as_str).map(rich_text))
         .unwrap_or_default();
-    let timestamp = value
+    let genuine_timestamp = value
         .get("createdAt")
         .and_then(parse_time)
-        .or_else(|| value.get("timestamp").and_then(parse_time))
-        .unwrap_or_else(|| fallback_stamp.to_string());
+        .or_else(|| value.get("timestamp").and_then(parse_time));
+    let timestamp = genuine_timestamp.clone().unwrap_or_else(|| fallback_stamp.to_string());
+    let genuine_timestamp = genuine_timestamp.filter(|_| {
+        value["synthetic"].as_bool() != Some(true) && value["isMeta"].as_bool() != Some(true)
+    });
     let model = value
         .get("modelInfo")
         .and_then(|info| info.get("modelName"))
@@ -649,6 +663,7 @@ fn parse_bubble(
         role,
         text,
         timestamp,
+        genuine_timestamp,
         model,
         input,
         output,

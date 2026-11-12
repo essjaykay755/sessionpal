@@ -1,3 +1,5 @@
+import { SessionTimingSection } from "../components/Timing";
+import { timingDuration } from "../lib/timing";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import {
@@ -46,7 +48,6 @@ import {
   clock,
   cn,
   compact,
-  duration,
   fullDate,
   money,
   number,
@@ -1316,6 +1317,8 @@ function DetailsPanel({
         <Stat label="File size" value={bytes(detail.sizeBytes)} icon={<Database className="h-3.5 w-3.5" />} />
       </div>
 
+      <SessionTimingSection key={detail.id} session={detail} />
+
       {usage && (
         <section className="rounded-[18px] border border-line/[0.07] bg-panel p-4">
           <div className="flex items-center justify-between">
@@ -1353,7 +1356,7 @@ function DetailsPanel({
       <section className="overflow-hidden rounded-[18px] border border-line/[0.07]">
         <MetaRow icon={<CalendarBlank className="h-3.5 w-3.5" />} label="Created" value={fullDate(detail.createdAt)} />
         <MetaRow icon={<Clock className="h-3.5 w-3.5" />} label="Last message" value={fullDate(detail.updatedAt)} />
-        <MetaRow icon={<Clock className="h-3.5 w-3.5" />} label="Duration" value={duration(detail.durationMs)} />
+        <MetaRow icon={<Clock className="h-3.5 w-3.5" />} label="Elapsed time" value={timingDuration(detail.timing?.elapsedMs)} />
         <MetaRow icon={<Cpu className="h-3.5 w-3.5" />} label="Model" value={detail.model ?? "Not recorded"} mono />
         <MetaRow icon={<ChatCircleDots className="h-3.5 w-3.5" />} label="Agent" value={AGENTS[detail.agent].name} />
         <MetaRow icon={<Database className="h-3.5 w-3.5" />} label="Storage" value={`${AGENTS[detail.agent].storageKind} · ${AGENTS[detail.agent].defaultRoot}`} mono last />

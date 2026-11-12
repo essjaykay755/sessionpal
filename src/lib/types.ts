@@ -63,6 +63,7 @@ export interface Message {
 }
 
 export interface SessionSummary {
+  timing?: SessionTiming | null;
   id: string;
   agent: AgentId;
   title: string;
@@ -100,6 +101,25 @@ export interface SessionSummary {
   demo?: boolean;
   tint: Tint;
   icon: string;
+}
+
+export interface TimingEntry {
+  id: string;
+  source: string;
+  kind: "turn" | "response" | "api";
+  timestamp: string;
+  durationMs: number;
+  status: "completed" | "interrupted" | "error";
+  timeToFirstTokenMs: number | null;
+}
+
+export interface SessionTiming {
+  activityIntervals: Array<{ startMs: number; endMs: number }>;
+  eventCount: number;
+  firstActivity: string;
+  lastActivity: string;
+  elapsedMs: number | null;
+  entries: TimingEntry[];
 }
 
 export interface SessionDetail extends SessionSummary {

@@ -352,11 +352,25 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
 
     let message_dir = root.join("message").join(&id);
     let mut metas = Vec::new();
+    let mut timing = crate::timing::Collector::default();
     if message_dir.is_dir() {
         for message_path in sorted_json_files(&message_dir) {
             if let Ok(raw) = fs::read(&message_path) {
                 if let Ok(message) = serde_json::from_slice::<Value>(&raw) {
-                    metas.push(parse_message_meta(&message, &message_path));
+                    let meta = parse_message_meta(&message, &message_path);
+                    let parts: Vec<Value> = if crate::util::is_safe_component(&meta.id) {
+                        sorted_json_files(&root.join("part").join(&meta.id)).into_iter()
+                            .filter_map(|path| fs::read(path).ok())
+                            .filter_map(|raw| serde_json::from_slice(&raw).ok()).collect()
+                    } else { Vec::new() };
+                    let actual = parts.iter().any(crate::timing::genuine_content)
+                        || (parts.is_empty() && meta.role == "assistant");
+                    if actual && matches!(meta.role.as_str(), "user" | "assistant")
+                        && message["synthetic"].as_bool() != Some(true) {
+                        timing.opencode(&message, &meta.id, &meta.role, &message["time"]["created"]);
+                        for part in &parts { timing.opencode_part(part); }
+                    }
+                    metas.push(meta);
                 }
             }
         }
@@ -481,6 +495,7 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
 
     Ok(ParsedSession {
         summary: SessionSummary {
+            timing: timing.finish(),
             id: builder.id,
             agent: AgentId::Opencode,
             title,

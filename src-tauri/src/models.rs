@@ -104,6 +104,9 @@ pub struct Message {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSummary {
+    /// Timing from genuine source events, never file metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<crate::timing::SessionTiming>,
     pub id: String,
     pub agent: AgentId,
     pub title: String,

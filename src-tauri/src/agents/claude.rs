@@ -185,6 +185,7 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
     let file = File::open(path).map_err(|error| format!("Could not open session: {error}"))?;
     let reader = BufReader::new(file);
     let mut builder = Builder::new();
+    let mut timing = crate::timing::Collector::default();
     let fallback_id = path
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -237,6 +238,7 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
             continue;
         }
 
+        timing.claude(&value);
         let stamp = value.get("timestamp").and_then(parse_time);
         builder.touch_time(stamp.clone());
         let message_stamp =
@@ -327,6 +329,7 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
 
     Ok(ParsedSession {
         summary: SessionSummary {
+            timing: timing.finish(),
             id: builder.id.unwrap_or(fallback_id),
             agent: AgentId::Claude,
             title,

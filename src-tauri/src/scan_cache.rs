@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{AgentDetection, AgentId, SessionSummary};
 
-const FORMAT: u32 = 1;
+const FORMAT: u32 = 2;
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SESSIONS_FILE: &str = "library-sessions.json";
 const DETECTIONS_FILE: &str = "library-agents.json";
@@ -85,6 +85,11 @@ struct Saved {
     entries: Vec<(PathBuf, Entry)>,
 }
 
+fn decode_saved(bytes: &[u8]) -> Option<Saved> {
+    serde_json::from_slice::<Saved>(bytes).ok()
+        .filter(|saved| saved.format == FORMAT && saved.version == APP_VERSION)
+}
+
 pub struct SummaryCache {
     name: &'static str,
     state: OnceLock<Mutex<State>>,
@@ -113,8 +118,7 @@ impl SummaryCache {
         let entries = self
             .file()
             .and_then(|file| fs::read(file).ok())
-            .and_then(|bytes| serde_json::from_slice::<Saved>(&bytes).ok())
-            .filter(|saved| saved.format == FORMAT && saved.version == APP_VERSION)
+            .and_then(|bytes| decode_saved(&bytes))
             .map(|saved| saved.entries.into_iter().collect())
             .unwrap_or_default();
         State {
@@ -249,8 +253,31 @@ fn save_snapshot<T: Serialize>(name: &str, value: T) {
 
 fn load_snapshot<T: for<'de> Deserialize<'de>>(name: &str) -> Option<Snapshot<T>> {
     let bytes = fs::read(cache_dir()?.join(name)).ok()?;
-    let snapshot: Snapshot<T> = serde_json::from_slice(&bytes).ok()?;
+    decode_snapshot(&bytes)
+}
+
+fn decode_snapshot<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Option<Snapshot<T>> {
+    let snapshot: Snapshot<T> = serde_json::from_slice(bytes).ok()?;
     (snapshot.format == FORMAT && snapshot.version == APP_VERSION).then_some(snapshot)
+}
+
+#[cfg(test)]
+mod timing_cache_tests {
+    use super::*;
+
+    #[test]
+    fn summaries_and_library_saved_before_timing_are_invalidated() {
+        for format in [1, FORMAT] {
+            let saved = serde_json::to_vec(&serde_json::json!({
+                "format": format, "version": APP_VERSION, "entries": []
+            })).unwrap();
+            let snapshot = serde_json::to_vec(&serde_json::json!({
+                "format": format, "version": APP_VERSION, "saved_at": "2026-11-05T00:00:00Z", "value": []
+            })).unwrap();
+            assert_eq!(decode_saved(&saved).is_some(), format == FORMAT);
+            assert_eq!(decode_snapshot::<Vec<SessionSummary>>(&snapshot).is_some(), format == FORMAT);
+        }
+    }
 }
 
 pub fn save_sessions(sessions: &[SessionSummary]) {

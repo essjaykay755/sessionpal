@@ -282,7 +282,7 @@ fn summarize(connection: &Connection, db: &Path, row: &SessionRow) -> SessionSum
     let created = iso_from_millis(row.created).unwrap_or_else(|| updated.clone());
 
     SessionSummary {
-        id: row.id.clone(),
+        timing: session_timing(connection, row),        id: row.id.clone(),
         agent: AgentId::Opencode,
         title,
         excerpt: excerpt_text,
@@ -546,4 +546,56 @@ pub(crate) fn snapshot_chats(source: &Path, destination: &Path) -> Result<(), St
         return Err("The OpenCode database has no session tables.".to_string());
     }
     Ok(())
+}
+
+/// Read timing during the summary scan too, without building transcripts.
+fn session_timing(connection: &Connection, row: &SessionRow) -> Option<crate::timing::SessionTiming> {
+    let mut timing = crate::timing::Collector::default();
+    let mut genuine = std::collections::HashSet::new();
+    let mut part_times: HashMap<String, Vec<Value>> = HashMap::new();
+    if matches!(row.schema, Schema::Legacy) {
+        let mut statement = connection.prepare("SELECT message_id, data FROM part WHERE session_id = ?1").ok()?;
+        let parts = statement.query_map([&row.id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).ok()?;
+        for (id, raw) in parts.flatten() {
+            if let Ok(part) = serde_json::from_str::<Value>(&raw) {
+                if crate::timing::genuine_content(&part) {
+                    genuine.insert(id.clone());
+                    // Retain timing fields only; no transcript construction during scans.
+                    part_times.entry(id).or_default().push(serde_json::json!({
+                        "type": "tool", "time": part["time"], "state": {"time": part["state"]["time"]}
+                    }));
+                }
+            }
+        }
+    }
+    let sql = match row.schema {
+        Schema::Current => "SELECT id, type, data, time_created FROM session_message WHERE session_id = ?1",
+        Schema::Legacy => "SELECT id, NULL, data, time_created FROM message WHERE session_id = ?1",
+    };
+    let mut statement = connection.prepare(sql).ok()?;
+    let rows = statement.query_map([&row.id], |r| Ok((
+        r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+        r.get::<_, String>(2)?, r.get::<_, Option<i64>>(3)?,
+    ))).ok()?;
+    for (id, role, raw, created) in rows.flatten() {
+        let Ok(data) = serde_json::from_str::<Value>(&raw) else { continue };
+        let role = if matches!(row.schema, Schema::Legacy) {
+            data["role"].as_str().unwrap_or("").to_string()
+        } else { role };
+        let actual = match row.schema {
+            Schema::Legacy => genuine.contains(&id),
+            Schema::Current => crate::timing::genuine_content(&data["text"])
+                || crate::timing::genuine_content(&data["content"]),
+        };
+        if !actual || !matches!(role.as_str(), "user" | "assistant") || data["synthetic"].as_bool() == Some(true) { continue; }
+        let created = data["time"]["created"].clone().as_i64().map(Value::from)
+            .or_else(|| data["time"]["created"].as_str().map(|s| Value::String(s.into())))
+            .or_else(|| created.filter(|ms| *ms > 0).map(Value::from)).unwrap_or(Value::Null);
+        timing.opencode(&data, &id, &role, &created);
+        for part in part_times.remove(&id).unwrap_or_default() { timing.opencode_part(&part); }
+        if let Some(parts) = data["content"].as_array() {
+            for part in parts { timing.opencode_part(part); }
+        }
+    }
+    timing.finish()
 }

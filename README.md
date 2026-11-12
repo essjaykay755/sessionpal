@@ -2,6 +2,8 @@
 
 **Your AI coding sessions, all in one place.**
 
+Latest release: **v0.6.0** — project activity time and recorded response timing.
+
 SessionPal is a local-first desktop library for sessions from **Claude Code, Codex, Cursor, OpenCode, and Google Antigravity**. Find past conversations, explore usage, and back up sessions on your own computer.
 
 [**Download for macOS or Windows**](https://github.com/essjaykay755/sessionpal/releases) · [Website](https://sessionpal.essjaykay.dev) · [Development guide](docs/development.md) · [Changelog](CHANGELOG.md)
@@ -30,7 +32,9 @@ Explore tokens by time, project, model, and agent. See cache savings and estimat
 
 ![Usage dashboard with four aligned summary cards, rounded section tabs, and token and cost charts](docs/screenshots/usage.png)
 
-[How cost estimates work](docs/data-and-privacy.md#cost-estimates)
+Projects also show estimated active AI-session time for the selected period and across their recorded history. Session Details shows elapsed time and recorded turn or response durations, including time to first token where available. Active time excludes gaps over 15 minutes and merges overlapping sessions within each project.
+
+[How cost estimates work](docs/data-and-privacy.md#cost-estimates) · [How timing works](docs/data-and-privacy.md#timing)
 
 ## Back up before cleanup
 
