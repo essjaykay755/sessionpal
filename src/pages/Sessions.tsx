@@ -1,5 +1,6 @@
 import { SessionTimingSection } from "../components/Timing";
 import { timingDuration } from "../lib/timing";
+import { detectedModels, modelChanges } from "../lib/modelHistory";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import {
@@ -846,6 +847,12 @@ function Transcript({
     () => groupTranscript(detail.messages.slice(0, count)),
     [detail.messages, count],
   );
+  const changes = useMemo(() => modelChanges(detail.agent, detail.messages), [detail.agent, detail.messages]);
+  const modelNotice = detail.agent === "cursor"
+    ? "Cursor may not record a model for every message. Exact model switch points are unavailable."
+    : detail.agent === "antigravity"
+      ? "Antigravity model data is not linked to individual messages. Exact model switch points are unavailable."
+      : null;
 
   // Opened from a text match: render up to the matching message, then bring it
   // into view and mark the words. Runs once per conversation and match.
@@ -880,6 +887,12 @@ function Transcript({
 
   return (
     <div className="mx-auto w-full max-w-[780px] px-5 py-5 sm:px-8 sm:py-6">
+      {modelNotice && (
+        <div className="mb-4 flex gap-2 rounded-xl border border-line/[0.08] bg-sunken/40 px-3 py-2.5 text-12 text-muted">
+          <WarningCircle className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
+          <span>{modelNotice} See Details for detected models.</span>
+        </div>
+      )}
       <div className="flex flex-col">
         {items.map((item) => (
           <div key={item.key} className="transcript-row">
@@ -893,6 +906,13 @@ function Transcript({
                   })}
                 </span>
                 <span className="h-px flex-1 bg-line/[0.06]" />
+              </div>
+            )}
+            {item.kind === "message" && changes.has(item.message.id) && (
+              <div className="my-3 flex items-center gap-2 text-12 text-muted" role="note">
+                <Cpu className="h-4 w-4 shrink-0" />
+                <span>Model changed to <span className="break-all font-mono font-medium text-fg/85">{changes.get(item.message.id)}</span></span>
+                <span className="h-px flex-1 bg-line/[0.08]" />
               </div>
             )}
             {item.kind === "tools" ? (
@@ -1101,7 +1121,7 @@ function MessageBubble({ message, detail }: { message: Message; detail: SessionD
         <div className="flex items-center gap-2 pb-1">
           <span className="text-12 font-semibold tracking-[-0.01em] text-fg/85">{name}</span>
           {message.model && !isUser && (
-            <span className="hidden truncate rounded-full bg-line/[0.045] px-1.5 py-0.5 font-mono text-11 text-faint sm:inline">
+            <span className="truncate rounded-full bg-line/[0.045] px-1.5 py-0.5 font-mono text-11 text-faint">
               {message.model}
             </span>
           )}
@@ -1262,6 +1282,7 @@ function DetailsPanel({
   onDelete: () => void;
 }) {
   const Icon = projectIcon(detail.icon);
+  const models = detectedModels(detail);
   const usage = detail.usage;
   const total = usage ? usageTokens(usage) || 1 : 1;
   const parts = usage
@@ -1357,7 +1378,7 @@ function DetailsPanel({
         <MetaRow icon={<CalendarBlank className="h-3.5 w-3.5" />} label="Created" value={fullDate(detail.createdAt)} />
         <MetaRow icon={<Clock className="h-3.5 w-3.5" />} label="Last message" value={fullDate(detail.updatedAt)} />
         <MetaRow icon={<Clock className="h-3.5 w-3.5" />} label="Elapsed time" value={timingDuration(detail.timing?.elapsedMs)} />
-        <MetaRow icon={<Cpu className="h-3.5 w-3.5" />} label="Model" value={detail.model ?? "Not recorded"} mono />
+        <MetaRow icon={<Cpu className="h-3.5 w-3.5" />} label={models.length === 1 ? "Model" : "Models detected"} value={models.length ? models.join(", ") : "Not recorded"} mono />
         <MetaRow icon={<ChatCircleDots className="h-3.5 w-3.5" />} label="Agent" value={AGENTS[detail.agent].name} />
         <MetaRow icon={<Database className="h-3.5 w-3.5" />} label="Storage" value={`${AGENTS[detail.agent].storageKind} · ${AGENTS[detail.agent].defaultRoot}`} mono last />
       </section>
