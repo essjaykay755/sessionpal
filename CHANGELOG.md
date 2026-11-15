@@ -7,6 +7,17 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.6.1] - 2026-11-15
+
+### Added
+
+- Show all detected session models in Details and mark observed model changes in supported conversation transcripts.
+- Explain when Cursor and Antigravity data cannot reliably place model switches in the conversation.
+
+### Changed
+
+- Keep assistant model labels visible in narrow session windows.
+
 ## [0.6.0] - 2026-11-12
 
 Measure recorded AI-session activity across your projects.
