@@ -131,11 +131,15 @@ export default function UsagePage() {
           { value: "models", label: "Models & agents" },
         ]}
       />
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 rounded-xl border border-line/[0.07] bg-panel px-4 py-3 text-12 leading-relaxed text-muted">
+        <span><strong className="font-semibold text-fg">{RANGE_LABELS[range]}</strong> · {new Date(`${span.from}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} – {new Date(`${span.to}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+        <span>API-equivalent estimates, not a bill{settings.showCosts && hasUnpricedUsage ? ` · ${number(totals.pricedSessions)} of ${number(totals.sessionsWithUsage)} sessions with usage priced` : ""}</span>
+      </div>
       {section === "overview" && (
         <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <UsageSummaryCard
-          label="Token composition"
+          label="Total tokens"
           tint="sky"
           value={<AnimatedNumber value={totals.tokens} format={compact} />}
           meta={`${compact(totals.input)} in · ${compact(totals.output)} out · ${compact(totals.cacheRead)} cache read${totals.cacheWrite ? ` · ${compact(totals.cacheWrite)} cache write` : ""}`}
@@ -144,7 +148,7 @@ export default function UsagePage() {
           label="API-equivalent spend"
           tint="peach"
           value={settings.showCosts ? (hasPricedSessions ? <AnimatedNumber value={totals.cost} format={(value) => money(value)} /> : "Unavailable") : "Hidden"}
-          meta={settings.showCosts ? (hasUnpricedUsage ? `${totals.pricedSessions} of ${totals.sessionsWithUsage} sessions priced` : "Standard API rates") : "Tap to show estimates"}
+          meta={settings.showCosts ? (hasUnpricedUsage ? `${totals.pricedSessions} of ${totals.sessionsWithUsage} sessions with usage priced · not a bill` : hasPricedSessions ? "Public API rates · not a bill" : "No priced usage in this period") : "Tap to show estimates"}
           estimated={settings.showCosts && hasPricedSessions}
           onClick={!settings.showCosts ? () => updateSettings({ showCosts: true }) : undefined}
         />

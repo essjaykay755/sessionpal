@@ -40,7 +40,7 @@ const PAGE_COMMANDS: Array<{ page: PageId; label: string; detail: string; icon: 
   { page: "sessions", label: "Sessions", detail: "Browse conversations", icon: <ChatCircleDots className="h-4 w-4" /> },
   { page: "usage", label: "Usage & cost", detail: "Tokens and estimates", icon: <ChartLineUp className="h-4 w-4" /> },
   { page: "backups", label: "Backups", detail: "Archives on this device", icon: <Archive className="h-4 w-4" /> },
-  { page: "manage", label: "Manage", detail: "Export and clean up", icon: <HardDrives className="h-4 w-4" /> },
+  { page: "manage", label: "Storage & cleanup", detail: "Export and clean up", icon: <HardDrives className="h-4 w-4" /> },
   { page: "settings", label: "Settings", detail: "Appearance and storage", icon: <GearSix className="h-4 w-4" /> },
 ];
 

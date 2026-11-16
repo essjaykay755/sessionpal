@@ -20,7 +20,7 @@ const PAGE_META: Record<PageId, string> = {
   sessions: "Sessions",
   usage: "Usage & cost",
   backups: "Backups",
-  manage: "Manage",
+  manage: "Storage & cleanup",
   settings: "Settings",
 };
 

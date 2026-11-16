@@ -410,6 +410,7 @@ export function SearchInput({
       <MagnifyingGlass className="h-4 w-4 shrink-0 text-faint" />
       <input
         value={value}
+        aria-label={placeholder}
         autoFocus={autoFocus}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}

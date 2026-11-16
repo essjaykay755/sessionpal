@@ -213,10 +213,13 @@ export default function ManagePage() {
   return (
     <PageScroll>
       <PageHeader
-        title="Manage"
+        title="Storage & cleanup"
         subtitle="Export or clean up sessions in bulk. Sessions inside an app's database are never removed."
         actions={
           <>
+            <Button variant="ghost" size="sm" icon={<Archive className="h-3.5 w-3.5" />} onClick={() => navigate("backups")}>
+              View backups
+            </Button>
             <Button
               variant="secondary"
               size="sm"
