@@ -20,6 +20,7 @@ import {
   GitBranch,
   Hash,
   MagnifyingGlass,
+  SlidersHorizontal,
   Coins,
   Cpu,
   Terminal,
@@ -123,6 +124,8 @@ export default function SessionsPage() {
     demo,
     sessions,
     loading,
+    error,
+    scanned,
     rescan,
     lastScanAt,
     agentFocus,
@@ -143,6 +146,8 @@ export default function SessionsPage() {
   } = useApp();
 
   const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [clockNow, setClockNow] = useState(Date.now);
   const contentSearch = useContentSearch(query, native && !demo);
   // The message to scroll to when a conversation is opened from a text match.
   const [jump, setJump] = useState<{ sessionId: string; messageId: string } | null>(null);
@@ -153,10 +158,16 @@ export default function SessionsPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
   const [tab, setTab] = useState<"conversation" | "details">("conversation");
+  const [transcriptJump, setTranscriptJump] = useState<{ id: string | null; sequence: number } | null>(null);
   const lastRequested = useRef<{ id: string; scan: string } | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const activeAgent = agentFocus;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setVisible(70);
@@ -164,6 +175,7 @@ export default function SessionsPage() {
 
   useEffect(() => {
     setTab("conversation");
+    setTranscriptJump(null);
   }, [selectedSessionId]);
 
   useEffect(() => {
@@ -244,11 +256,17 @@ export default function SessionsPage() {
   useEffect(() => {
     if (!settings.showCosts && sort === "cost") setSort("tokens");
   }, [settings.showCosts, sort]);
+  const filterCount = Number(activeAgent !== "all") + Number(project !== "all") + Number(sort !== "recent");
   const filterActive = activeAgent !== "all" || project !== "all" || query.trim().length > 0;
 
-  const clearFilters = () => {
+  const clearRefinements = () => {
     focusAgent("all");
     setProject("all");
+    setSort("recent");
+  };
+
+  const clearFilters = () => {
+    clearRefinements();
     setQuery("");
   };
 
@@ -324,15 +342,16 @@ export default function SessionsPage() {
             icon={<FolderOpen className="h-3.5 w-3.5" />}
             onClick={() => navigate("manage")}
           >
-            Manage storage
+            Storage & cleanup
           </Button>
           <Button
             variant="secondary"
             size="sm"
             icon={<ArrowsClockwise className={cn("h-3.5 w-3.5", loading && "animate-spin")} />}
             onClick={() => void rescan()}
+            disabled={loading}
           >
-            Rescan
+            {loading ? "Refreshing…" : "Refresh library"}
           </Button>
         </div>
       </div>
@@ -345,6 +364,10 @@ export default function SessionsPage() {
           )}
         >
           <div className="shrink-0 space-y-2.5 border-b border-line/[0.065] p-3">
+            <div className="flex items-center gap-1.5 text-12 text-muted" role="status" aria-live="polite">
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              <span>{loading ? "Refreshing library…" : error ? (scanned ? `Refresh failed · last scanned ${relativeTime(lastScanAt, clockNow)}` : "Library refresh failed") : demo || !native ? `Sample library · refreshed ${relativeTime(lastScanAt, clockNow)}` : scanned ? `Last scanned ${relativeTime(lastScanAt, clockNow)}` : "Not scanned yet"}</span>
+            </div>
             <SearchInput
               value={query}
               onChange={setQuery}
@@ -353,12 +376,21 @@ export default function SessionsPage() {
               className="h-9 rounded-[12px] bg-sunken/45 px-3 text-12 shadow-none"
             />
 
+            <div className="flex items-center justify-between gap-2">
+              <button type="button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen} aria-controls="session-filters" className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] px-2 text-12 font-medium text-muted hover:bg-sunken/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500">
+                <SlidersHorizontal className="h-4 w-4" /> Filters {filterCount > 0 && <span className="rounded-full bg-copper-500/15 px-1.5 text-copper-700 dark:text-copper-300">{filterCount}</span>}
+                <CaretDown className={cn("h-3 w-3 transition-transform", filtersOpen && "rotate-180")} />
+              </button>
+              {filterCount > 0 && <button type="button" onClick={clearRefinements} className="min-h-9 px-2 text-12 font-medium text-copper-600 hover:text-copper-700 dark:text-copper-300">Clear filters</button>}
+            </div>
+
+            <div id="session-filters" hidden={!filtersOpen} className="space-y-2">
             <div className="relative">
               <select
                 value={activeAgent}
                 onChange={(event) => focusAgent(event.target.value as AgentId | "all")}
                 aria-label="Filter by agent"
-                className="h-9 w-full cursor-pointer appearance-none rounded-[10px] border border-line/[0.08] bg-panel pl-3 pr-8 text-12 text-fg outline-none hover:bg-sunken/50"
+                className="h-9 w-full cursor-pointer appearance-none rounded-[10px] border border-line/[0.08] bg-panel pl-3 pr-8 text-12 text-fg hover:bg-sunken/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500"
               >
                 <option value="all">All agents ({counts.all})</option>
                 {AGENT_ORDER.map((agent) => (
@@ -374,7 +406,7 @@ export default function SessionsPage() {
                   value={project}
                   onChange={(event) => setProject(event.target.value)}
                   aria-label="Filter by project"
-                  className="h-8 w-full cursor-pointer appearance-none rounded-[10px] border border-line/[0.08] bg-panel pl-3 pr-7 text-12 font-medium text-fg outline-none transition-colors hover:bg-sunken/50"
+                  className="h-8 w-full cursor-pointer appearance-none rounded-[10px] border border-line/[0.08] bg-panel pl-3 pr-7 text-12 font-medium text-fg transition-colors hover:bg-sunken/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500"
                 >
                   <option value="all">All projects</option>
                   {projects.map((item) => (
@@ -390,7 +422,7 @@ export default function SessionsPage() {
                   value={sort}
                   onChange={(event) => setSort(event.target.value as SortKey)}
                   aria-label="Sort sessions"
-                  className="h-8 w-full cursor-pointer appearance-none rounded-[10px] border border-line/[0.08] bg-panel pl-3 pr-7 text-12 font-medium text-fg outline-none transition-colors hover:bg-sunken/50"
+                  className="h-8 w-full cursor-pointer appearance-none rounded-[10px] border border-line/[0.08] bg-panel pl-3 pr-7 text-12 font-medium text-fg transition-colors hover:bg-sunken/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500"
                 >
                   {sortOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -400,6 +432,7 @@ export default function SessionsPage() {
                 </select>
                 <CaretDown className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-faint" />
               </div>
+            </div>
             </div>
 
             <div className="flex items-center justify-between px-1 text-12 text-faint">
@@ -412,14 +445,14 @@ export default function SessionsPage() {
                     ? " · searching text…"
                     : ""}
               </span>
-              {filterActive && (
+              {query.trim() && (
                 <button
                   type="button"
-                  onClick={clearFilters}
+                  onClick={() => setQuery("")}
                   className="flex items-center gap-1 font-medium text-copper-600 transition-colors hover:text-copper-700 dark:text-copper-300 dark:hover:text-copper-200"
                 >
                   <X className="h-2.5 w-2.5" />
-                  Clear filters
+                  Clear search
                 </button>
               )}
             </div>
@@ -472,7 +505,7 @@ export default function SessionsPage() {
                     setMobileDetail(true);
                   }}
                   className={cn(
-                    "group relative mb-0.5 flex w-full items-start gap-2.5 rounded-[14px] px-2.5 py-2.5 text-left outline-none transition-colors duration-200",
+                    "group relative mb-0.5 flex w-full items-start gap-2.5 rounded-[14px] px-2.5 py-2.5 text-left transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500",
                     isSelected
                       ? "bg-sunken/90 ring-1 ring-inset ring-line/[0.055]"
                       : "hover:bg-sunken/45 focus-visible:bg-sunken/45",
@@ -682,6 +715,9 @@ export default function SessionsPage() {
                     <IconButton icon={<Copy className="h-4 w-4" />} label="Copy transcript" onClick={copyTranscript} tooltipSide="bottom" />
                   </div>
                 </div>
+                {tab === "conversation" && activeDetail.messages.length > 0 && (
+                  <ConversationNavigation key={activeDetail.id} detail={activeDetail} onJump={(id) => setTranscriptJump((current) => ({ id, sequence: (current?.sequence ?? 0) + 1 }))} />
+                )}
               </header>
 
               <div ref={transcriptRef} className="min-h-0 flex-1 overflow-y-auto">
@@ -689,6 +725,7 @@ export default function SessionsPage() {
                   <Transcript
                     detail={activeDetail}
                     scrollRoot={transcriptRef}
+                    navigation={transcriptJump}
                     focus={
                       jump && jump.sessionId === activeDetail.id
                         ? { messageId: jump.messageId, words: contentWords(query) }
@@ -699,6 +736,7 @@ export default function SessionsPage() {
                   <DetailsPanel
                     detail={activeDetail}
                     showCosts={settings.showCosts}
+                    onModelJump={(id) => { setTab("conversation"); setTranscriptJump((current) => ({ id, sequence: (current?.sequence ?? 0) + 1 })); }}
                     onExport={() => openDialog({ kind: "export-sessions", ids: [activeDetail.id] })}
                     onReveal={() => void revealLocation(activeDetail.path, activeDetail.title)}
                     onCopyPath={() => void copyPath(activeDetail.path)}
@@ -807,15 +845,57 @@ function clearHighlights(): void {
   (globalThis as { CSS?: { highlights?: Map<string, unknown> } }).CSS?.highlights?.delete(MATCH_HIGHLIGHT);
 }
 
+function modelHistoryNotice(agent: AgentId): string | null {
+  if (agent === "cursor") return "Cursor may not record a model for every message. Exact model switch points are unavailable.";
+  if (agent === "antigravity") return "Antigravity model data is not linked to individual messages. Exact model switch points are unavailable.";
+  return null;
+}
+
+function ConversationNavigation({ detail, onJump }: { detail: SessionDetail; onJump: (id: string | null) => void }) {
+  const [selected, setSelected] = useState("");
+  const changes = useMemo(() => modelChanges(detail.agent, detail.messages), [detail.agent, detail.messages]);
+  const entries = useMemo(() => {
+    const prompts: { id: string; label: string }[] = [];
+    const models: { id: string; label: string }[] = [];
+    const errors: { id: string; label: string }[] = [];
+    for (const message of detail.messages) {
+      if (message.role === "user" && !isInternalContext(message)) {
+        prompts.push({ id: message.id, label: message.content.replace(/\s+/g, " ").trim().slice(0, 80) || "User message" });
+      }
+      const model = changes.get(message.id);
+      if (model) models.push({ id: message.id, label: model });
+      if (message.role === "tool" && message.toolStatus === "error") {
+        errors.push({ id: message.id, label: message.toolName || "Tool error" });
+      }
+    }
+    return { prompts, models, errors };
+  }, [detail.messages, changes]);
+  const choices = [...entries.prompts, ...entries.models, ...entries.errors];
+  return (
+    <div className="flex items-center gap-2 border-t border-line/[0.055] py-2">
+      <label htmlFor="conversation-jump" className="shrink-0 text-12 text-muted">Jump to</label>
+      <select id="conversation-jump" value={selected} onChange={(event) => { const value = event.target.value; setSelected(value); const choice = choices[Number(value)]; if (value !== "" && choice) onJump(choice.id); }} className="min-w-0 flex-1 rounded-lg border border-line/[0.08] bg-panel px-2 py-1.5 text-12 text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500">
+        <option value="">Choose a moment…</option>
+        {entries.prompts.length > 0 && <optgroup label="Your messages">{entries.prompts.map((entry, index) => <option key={`prompt-${entry.id}-${index}`} value={index}>{entry.label}</option>)}</optgroup>}
+        {entries.models.length > 0 && <optgroup label="Model changes">{entries.models.map((entry, index) => <option key={`model-${entry.id}-${index}`} value={entries.prompts.length + index}>{entry.label}</option>)}</optgroup>}
+        {entries.errors.length > 0 && <optgroup label="Tool errors">{entries.errors.map((entry, index) => <option key={`error-${entry.id}-${index}`} value={entries.prompts.length + entries.models.length + index}>{entry.label}</option>)}</optgroup>}
+      </select>
+      <button type="button" onClick={() => { setSelected(""); onJump(null); }} className="shrink-0 rounded-lg px-2 py-1.5 text-12 font-medium text-copper-600 hover:bg-sunken/60 dark:text-copper-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500">Latest</button>
+    </div>
+  );
+}
+
 function Transcript({
   detail,
   scrollRoot,
   focus,
+  navigation,
 }: {
   detail: SessionDetail;
   scrollRoot: React.RefObject<HTMLDivElement | null>;
   /** A message to scroll to, with the searched words to mark in it. */
   focus?: { messageId: string; words: string[] } | null;
+  navigation: { id: string | null; sequence: number } | null;
 }) {
   // Long sessions can hold thousands of messages. Render them in batches as the
   // reader scrolls instead of mounting everything at once.
@@ -848,11 +928,7 @@ function Transcript({
     [detail.messages, count],
   );
   const changes = useMemo(() => modelChanges(detail.agent, detail.messages), [detail.agent, detail.messages]);
-  const modelNotice = detail.agent === "cursor"
-    ? "Cursor may not record a model for every message. Exact model switch points are unavailable."
-    : detail.agent === "antigravity"
-      ? "Antigravity model data is not linked to individual messages. Exact model switch points are unavailable."
-      : null;
+  const modelNotice = modelHistoryNotice(detail.agent);
 
   // Opened from a text match: render up to the matching message, then bring it
   // into view and mark the words. Runs once per conversation and match.
@@ -882,6 +958,34 @@ function Transcript({
     if (!focus) clearHighlights();
   }, [focus]);
   useEffect(() => clearHighlights, [detail.id]);
+
+  const navigated = useRef<string | null>(null);
+  useEffect(() => { navigated.current = null; }, [detail.id]);
+  useEffect(() => {
+    if (!navigation) return;
+    const key = `${detail.id}:${navigation.sequence}`;
+    if (navigated.current === key) return;
+    const index = navigation.id === null ? total - 1 : detail.messages.findIndex((message) => message.id === navigation.id);
+    if (index < 0) return;
+    if (index >= count) {
+      setCount(navigation.id === null ? total : Math.min(total, index + TRANSCRIPT_BATCH));
+      return;
+    }
+    if (navigation.id === null) {
+      scrollRoot.current?.scrollTo({ top: scrollRoot.current.scrollHeight, behavior: "smooth" });
+    } else {
+      const node = scrollRoot.current?.querySelector(`[data-message-id="${CSS.escape(navigation.id)}"]`);
+      if (!node) return;
+      const step = node.closest("details[data-tool-step]");
+      if (step instanceof HTMLDetailsElement) {
+        const group = step.closest("details[data-tool-group]");
+        if (group instanceof HTMLDetailsElement) group.open = true;
+        step.open = true;
+      }
+      (step ?? node).scrollIntoView({ block: "center" });
+    }
+    navigated.current = key;
+  }, [navigation, detail.id, detail.messages, count, total, scrollRoot]);
 
   const remaining = total - count;
 
@@ -1025,7 +1129,7 @@ function ToolGroup({ steps }: { steps: ToolStep[] }) {
   }
   const failures = steps.filter(stepFailed).length;
   return (
-    <details className="group/tools my-1.5 ml-10 sm:ml-[38px]">
+    <details data-tool-group className="group/tools my-1.5 ml-10 sm:ml-[38px]">
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-[8px] px-2 py-1.5 text-12 text-muted transition-colors hover:bg-line/[0.04] hover:text-fg [&::-webkit-details-marker]:hidden">
         <CaretDown className="h-3 w-3 shrink-0 -rotate-90 transition-transform group-open/tools:rotate-0" />
         <Wrench className="h-3.5 w-3.5 shrink-0 text-faint" />
@@ -1048,7 +1152,7 @@ function ToolStepRow({ step }: { step: ToolStep }) {
   const failed = stepFailed(step);
   const detail = step.call?.toolDetail;
   return (
-    <details className="group/step">
+    <details data-tool-step className="group/step">
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-[8px] px-2 py-1.5 text-12 text-muted transition-colors hover:bg-line/[0.04] hover:text-fg [&::-webkit-details-marker]:hidden">
         <span
           className={cn(
@@ -1060,6 +1164,7 @@ function ToolStepRow({ step }: { step: ToolStep }) {
         {detail && <span className="truncate font-mono text-11 text-faint">{detail}</span>}
         {failed && <span className="ml-auto shrink-0 text-danger">Failed</span>}
       </summary>
+      {[step.call, step.result].filter((message): message is Message => !!message).map((message) => <span key={message.id} data-message-id={message.id} />)}
       <div className="mb-1.5 ml-2 space-y-1.5 rounded-[10px] border border-line/[0.07] bg-sunken/30 p-2.5">
         {step.call && <ToolPayload label="Input" content={step.call.content} />}
         {step.result && <ToolPayload label="Output" content={step.result.content} />}
@@ -1273,6 +1378,7 @@ function DetailsPanel({
   onReveal,
   onCopyPath,
   onDelete,
+  onModelJump,
 }: {
   detail: SessionDetail;
   showCosts: boolean;
@@ -1280,9 +1386,18 @@ function DetailsPanel({
   onReveal: () => void;
   onCopyPath: () => void;
   onDelete: () => void;
+  onModelJump: (id: string) => void;
 }) {
   const Icon = projectIcon(detail.icon);
   const models = detectedModels(detail);
+  const modelNotice = modelHistoryNotice(detail.agent);
+  const firstModelMessages = new Map<string, string>();
+  if (!modelNotice) {
+    for (const message of detail.messages) {
+      if (message.role === "assistant" && message.model && !firstModelMessages.has(message.model)) firstModelMessages.set(message.model, message.id);
+    }
+  }
+  const hasLinkedModels = models.some((model) => firstModelMessages.has(model));
   const usage = detail.usage;
   const total = usage ? usageTokens(usage) || 1 : 1;
   const parts = usage
@@ -1332,13 +1447,33 @@ function DetailsPanel({
         <Stat label="Tokens" value={detail.usage ? compact(detail.tokens) : "—"} icon={<Hash className="h-3.5 w-3.5" />} />
         <Stat
           label="Est. cost"
-          value={showCosts && usage?.cost !== null && usage ? `≈ ${money(usage.cost)}` : "Hidden"}
+          value={!showCosts ? "Hidden" : canEstimateSessionCost(detail) && usage?.cost != null ? `≈ ${money(usage.cost)}` : "Unavailable"}
           icon={<Coins className="h-3.5 w-3.5" />}
         />
         <Stat label="File size" value={bytes(detail.sizeBytes)} icon={<Database className="h-3.5 w-3.5" />} />
       </div>
 
       <SessionTimingSection key={detail.id} session={detail} />
+
+      <section className="rounded-[18px] border border-line/[0.07] bg-panel p-4">
+        <div className="flex items-center gap-2 text-fg">
+          <Cpu className="h-4 w-4 text-faint" />
+          <h3 className="text-12 font-semibold">Models detected</h3>
+        </div>
+        {models.length ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {models.map((model) => {
+              const messageId = firstModelMessages.get(model);
+              return messageId ? (
+                <button key={model} type="button" onClick={() => onModelJump(messageId)} aria-label={`Show first response recorded with ${model}`} className="max-w-full break-all rounded-lg border border-line/[0.08] bg-sunken/40 px-2.5 py-1.5 text-left font-mono text-12 text-fg/85 hover:bg-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500">{model}</button>
+              ) : (
+                <span key={model} className="max-w-full break-all rounded-lg border border-line/[0.08] bg-sunken/40 px-2.5 py-1.5 font-mono text-12 text-muted">{model}</span>
+              );
+            })}
+          </div>
+        ) : <p className="mt-2 text-12 text-muted">No model information was recorded for this session.</p>}
+        {modelNotice ? <p className="mt-2.5 text-12 leading-relaxed text-muted">{modelNotice}</p> : models.length > 0 && <p className="mt-2.5 text-12 leading-relaxed text-muted">{hasLinkedModels ? "Select a model to see its first identified response, when available." : "Response-level model information is unavailable."}</p>}
+      </section>
 
       {usage && (
         <section className="rounded-[18px] border border-line/[0.07] bg-panel p-4">
@@ -1378,7 +1513,6 @@ function DetailsPanel({
         <MetaRow icon={<CalendarBlank className="h-3.5 w-3.5" />} label="Created" value={fullDate(detail.createdAt)} />
         <MetaRow icon={<Clock className="h-3.5 w-3.5" />} label="Last message" value={fullDate(detail.updatedAt)} />
         <MetaRow icon={<Clock className="h-3.5 w-3.5" />} label="Elapsed time" value={timingDuration(detail.timing?.elapsedMs)} />
-        <MetaRow icon={<Cpu className="h-3.5 w-3.5" />} label={models.length === 1 ? "Model" : "Models detected"} value={models.length ? models.join(", ") : "Not recorded"} mono />
         <MetaRow icon={<ChatCircleDots className="h-3.5 w-3.5" />} label="Agent" value={AGENTS[detail.agent].name} />
         <MetaRow icon={<Database className="h-3.5 w-3.5" />} label="Storage" value={`${AGENTS[detail.agent].storageKind} · ${AGENTS[detail.agent].defaultRoot}`} mono last />
       </section>

@@ -41,6 +41,7 @@ export default function BackupsPage() {
     copyPath,
     settings,
     demo,
+    navigate,
   } = useApp();
 
   const latest = backups[0] ?? null;
@@ -88,6 +89,9 @@ export default function BackupsPage() {
         subtitle="Local ZIP archives of your sessions. Make one before a cleanup."
         actions={
           <>
+            <Button variant="ghost" size="sm" icon={<HardDrives className="h-3.5 w-3.5" />} onClick={() => navigate("manage")}>
+              Storage & cleanup
+            </Button>
             <Button
               variant="ghost"
               size="sm"

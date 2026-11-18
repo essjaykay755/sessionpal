@@ -7,6 +7,20 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.6.2] - 2026-11-16
+
+### Added
+
+- Navigate conversations by user message, detected model change, or tool error, and return to the latest message.
+- Show detected models separately in session details and jump to the first identified response when available.
+- Show library refresh status, the last successful scan, and clearer pricing coverage for the selected usage period.
+
+### Changed
+
+- Group session filters and sorting behind a compact control with a count and clear action.
+- Rename Manage to Storage & cleanup and add links between storage and backups.
+- Improve search labels and keyboard focus indicators, and distinguish unavailable cost estimates from hidden costs.
+
 ## [0.6.1] - 2026-11-15
 
 ### Added

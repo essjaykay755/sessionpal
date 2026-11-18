@@ -58,7 +58,7 @@ export function Sidebar() {
   ];
   const libraryNav: NavItem[] = [
     { page: "backups", label: "Backups", icon: Archive, count: backups.length },
-    { page: "manage", label: "Manage", icon: HardDrives },
+    { page: "manage", label: "Storage & cleanup", icon: HardDrives },
   ];
 
   const renderItem = (item: NavItem) => {
