@@ -7,6 +7,22 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.6.3] - 2026-11-21
+
+### Added
+
+- Calculate Antigravity project active time, including lifetime totals, from recorded message timestamps.
+
+### Changed
+
+- Check for current model rates immediately when you select Refresh library.
+
+### Fixed
+
+- Prefer the model maker’s API rates when providers disagree, and include Gemini 4 Neon rates for offline estimates.
+- Price Antigravity generations using their recorded models so sessions that switch models can show a complete estimate.
+- Open the matching tool step when jumping to a tool error in a conversation.
+
 ## [0.6.2] - 2026-11-16
 
 ### Added

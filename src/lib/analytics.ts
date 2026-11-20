@@ -43,9 +43,11 @@ export function filterRange(
   return sessions.filter((session) => inRange(session, days, now));
 }
 
-// A session-level model cannot price a mixed-model transcript reliably.
+// Antigravity estimates each generation using its own model. Other readers
+// may only have a single model to price a session's aggregate token counts.
 export function canEstimateSessionCost(session: SessionSummary): boolean {
-  return !!session.usage && session.usage.cost !== null && new Set(session.models.filter(Boolean)).size <= 1;
+  return !!session.usage && session.usage.cost !== null
+    && (session.agent === "antigravity" || new Set(session.models.filter(Boolean)).size <= 1);
 }
 
 function canEstimateCacheSavings(session: SessionSummary): boolean {

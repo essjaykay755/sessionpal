@@ -6,6 +6,17 @@
   "verifiedAt": null,
   "models": [
     {
+      "id": "gemini-4-neon",
+      "label": "Gemini 4 Neon",
+      "family": "Google",
+      "color": "#6093d2",
+      "input": 3,
+      "output": 15,
+      "cacheRead": 0.15,
+      "cacheWrite": 3,
+      "source": "https://aistudio.google.com/docs/pricing#gemini-4-neon"
+    },
+    {
       "id": "deepseek-v4.1-flash-free",
       "label": "DeepSeek V4.1 Flash Free",
       "family": "Unknown",

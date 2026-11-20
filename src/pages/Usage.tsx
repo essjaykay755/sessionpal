@@ -480,7 +480,7 @@ export default function UsagePage() {
             <div className="flex items-center gap-2 border-t border-line/[0.06] px-5 py-3 text-11 text-faint sm:px-6">
               <EstimatedTag />
               <span>
-                Model usage is grouped by session; sessions using multiple models are shown together. Dates reflect each session’s last update. {hasUnpricedUsage ? "Cost totals exclude unpriced or mixed-model sessions." : "Costs are API-equivalent estimates, not a subscription bill."}
+                Sessions that used multiple models are shown together. Dates reflect each session’s last update. {hasUnpricedUsage ? "Cost totals include sessions with a complete estimate." : "Costs are API-equivalent estimates, not a subscription bill."}
               </span>
             </div>
           )}
@@ -530,7 +530,7 @@ export default function UsagePage() {
       <div className="mt-3.5 flex items-center justify-between gap-4 rounded-[15px] border border-line/[0.06] bg-panel/55 px-4 py-3 text-11 text-faint">
         <span className="flex items-center gap-2">
           <Coins className="h-3.5 w-3.5" />
-          {hasUnpricedUsage || hasIncompleteSavings ? "Estimates exclude unpriced or mixed-model sessions. " : ""}Estimates use current API rates, including paid equivalents of recognized free models. Rates may differ by provider; missing cache rates use input pricing. Subscription usage is not reflected. * Haiku 5.5 uses base rates; prompts over 100,000 tokens cost more.
+          {hasUnpricedUsage || hasIncompleteSavings ? "Totals include sessions with sufficient data for each estimate. " : ""}Estimates use current API rates, including paid equivalents of recognized free models. Rates may differ by provider. Missing cache rates use input pricing. Subscription usage is not reflected. * Haiku 5.5 uses base rates. Prompts over 100,000 tokens cost more.
         </span>
         <button
           type="button"

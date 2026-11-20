@@ -27,6 +27,21 @@ test('conflicting providers and incompatible canonical models remain unpriced', 
   assert.deepEqual(prices, []);
 });
 
+test('model makers supply the default rate for new models sold by several providers', () => {
+  const model = { id: 'gemini-4-neon', canonical_model_id: 'google/gemini-4-neon' };
+  const prices = parseLivePrices({
+    gateway: { models: { 'gemini-4-neon': { ...model, cost: { input: 3.412, output: 17.061 } } } },
+    google: { models: { 'gemini-4-neon': { id: model.id, cost: { input: 3, output: 15, cache_read: 0.15 } } } },
+  }, { 'google/gemini-4-neon': model });
+  assert.deepEqual(prices.map(({ id, input, output, cacheRead }) => [id, input, output, cacheRead]), [
+    ['gemini-4-neon', 3, 15, 0.15],
+  ]);
+  assert.deepEqual(parseLivePrices({
+    google: { models: { 'gemini-4-neon': { ...model, cost: { input: 3, output: 15 } } } },
+    other: { models: { 'gemini-4-neon': { ...model, canonical_model_id: 'other/neon' } } },
+  }), []);
+});
+
 test('canonical metadata identifies the lab independently of pricing and hosting provider', () => {
   setLiveMetadata(parseModelMetadata({ providers: {
     anthropic: { name: 'Anthropic' },
@@ -71,4 +86,21 @@ test('an old pricing cache is retained when the catalog is offline', async () =>
   globalThis.fetch = async () => { throw new Error('offline'); };
   try { assert.deepEqual(await loadLivePrices(), { prices: [{ id: 'old' }], metadata: [] }); }
   finally { globalThis.fetch = originalFetch; delete globalThis.localStorage; }
+});
+
+test('manual refresh checks the catalog even when prices were recently cached', async () => {
+  const storage = new Map([['sessionpal.model-catalog.v3', JSON.stringify({ time: Date.now(), prices: [{ id: 'old' }], metadata: [] })]]);
+  globalThis.localStorage = { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) };
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    return { ok: true, json: async () => ({ providers: { lab: { models: { 'new': { id: 'new', cost: { input: 1, output: 2 } } } } } }) };
+  };
+  try {
+    assert.equal((await loadLivePrices()).prices[0].id, 'old');
+    assert.equal(requests, 0);
+    assert.equal((await loadLivePrices(true)).prices[0].id, 'new');
+    assert.equal(requests, 1);
+  } finally { globalThis.fetch = originalFetch; delete globalThis.localStorage; }
 });

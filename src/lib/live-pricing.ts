@@ -1,7 +1,8 @@
 import type { ModelInfo, ModelMetadata } from "./pricing";
 
 const KEY = "sessionpal.model-prices.v1";
-const CATALOG_KEY = "sessionpal.model-catalog.v2";
+const CATALOG_KEY = "sessionpal.model-catalog.v3";
+const PREVIOUS_CATALOG_KEY = "sessionpal.model-catalog.v2";
 const MAX_AGE = 24 * 60 * 60 * 1000;
 type Entry = { id: string; name?: string; canonical_model_id?: string; cost?: { input?: number; output?: number; cache_read?: number; cache_write?: number } };
 type Provider = { name?: string; models?: Record<string, Entry> };
@@ -49,63 +50,78 @@ export function parseModelMetadata(data: unknown): ModelMetadata[] {
   }).filter((model): model is ModelMetadata => model !== null);
 }
 
-/** Build a conservative ID map. Ambiguous IDs are omitted instead of guessed. */
-export function parseLivePrices(data: unknown): ModelInfo[] {
+/** Prefer the model author's API rate when the catalog identifies the author. */
+export function parseLivePrices(data: unknown, canonicalModels?: unknown): ModelInfo[] {
   if (!data || typeof data !== "object" || Array.isArray(data)) return [];
   const providers = data as Record<string, Provider>;
-  const candidates = new Map<string, ModelInfo[]>();
-  const add = (id: string, model: Entry, displayName?: string) => {
+  const canonicalIds = new Set(canonicalModels && typeof canonicalModels === "object" ? Object.keys(canonicalModels) : []);
+  const identities = new Map<string, Set<string>>();
+  const candidates = new Map<string, Array<{ price: ModelInfo; firstParty: boolean }>>();
+  const add = (id: string, model: Entry, firstParty: boolean, displayName?: string) => {
     const cost = model.cost;
     if (!cost || typeof cost.input !== "number" || typeof cost.output !== "number" || cost.input < 0 || cost.output < 0 || cost.input > 1_000_000 || cost.output > 1_000_000 || !Number.isFinite(cost.input) || !Number.isFinite(cost.output) || cost.input + cost.output === 0) return;
     const rate = (n: number | undefined) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1_000_000 ? n : cost.input!;
     const price: ModelInfo = { id, label: displayName || model.name || id, family: "Unknown", color: "#8d8477", input: cost.input, output: cost.output, cacheRead: rate(cost.cache_read), cacheWrite: rate(cost.cache_write) };
     const list = candidates.get(id) ?? [];
-    list.push(price);
+    list.push({ price, firstParty });
     candidates.set(id, list);
   };
-  for (const provider of Object.values(providers)) {
+  for (const [providerId, provider] of Object.entries(providers)) {
     if (!provider || typeof provider.models !== "object" || !provider.models) continue;
     for (const [key, model] of Object.entries(provider.models)) {
       if (!model || typeof model !== "object") continue;
       const id = (typeof model.id === "string" ? model.id : key).toLowerCase().split("/").pop()!;
       if (!id || id.length > 300) continue;
+      const ownId = `${providerId}/${id}`;
+      const canonicalId = typeof model.canonical_model_id === "string" ? model.canonical_model_id.toLowerCase()
+        : canonicalIds.has(ownId) ? ownId : undefined;
+      if (canonicalId) {
+        const ids = identities.get(id) ?? new Set<string>();
+        ids.add(canonicalId);
+        identities.set(id, ids);
+      }
       if (id.endsWith("-free") || id.endsWith(":free")) {
         const paidId = id.replace(/(?:-free|:free)$/, "");
         const paid = provider.models[paidId];
         // The provider must publish both IDs; conflicting canonical IDs disqualify the match.
-        if (paid && (!model.canonical_model_id || !paid.canonical_model_id || model.canonical_model_id === paid.canonical_model_id)) add(id, paid, model.name);
+        if (paid && (!model.canonical_model_id || !paid.canonical_model_id || model.canonical_model_id === paid.canonical_model_id)) add(id, paid, false, model.name);
       } else {
-        add(id, model);
+        add(id, model, canonicalId?.split("/")[0] === providerId);
       }
     }
   }
   const result: ModelInfo[] = [];
-  for (const list of candidates.values()) {
-    const first = list[0];
-    if (list.every((p) => p.input === first.input && p.output === first.output && p.cacheRead === first.cacheRead && p.cacheWrite === first.cacheWrite)) result.push(first);
+  for (const [id, list] of candidates) {
+    if ((identities.get(id)?.size ?? 0) > 1) continue;
+    const firstParty = list.filter((candidate) => candidate.firstParty);
+    const rates = firstParty.length ? firstParty : list;
+    const first = rates[0].price;
+    if (rates.every(({ price: p }) => p.input === first.input && p.output === first.output && p.cacheRead === first.cacheRead && p.cacheWrite === first.cacheWrite)) result.push(first);
   }
   return result.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export async function loadLivePrices(): Promise<{ prices: ModelInfo[]; metadata: ModelMetadata[] }> {
+export async function loadLivePrices(refresh = false): Promise<{ prices: ModelInfo[]; metadata: ModelMetadata[] }> {
   let catalogCache: { time: number; prices: ModelInfo[]; metadata: ModelMetadata[] } | null = null;
   try { catalogCache = JSON.parse(localStorage.getItem(CATALOG_KEY) || "null"); } catch { /* ignore a damaged cache */ }
   let cached: { time: number; prices: ModelInfo[] } | null = null;
   try { cached = JSON.parse(localStorage.getItem(KEY) || "null"); } catch { /* ignore a damaged cache */ }
-  if (catalogCache && Array.isArray(catalogCache.prices) && Array.isArray(catalogCache.metadata) && Date.now() - catalogCache.time < MAX_AGE) return catalogCache;
+  if (!refresh && catalogCache && Array.isArray(catalogCache.prices) && Array.isArray(catalogCache.metadata) && Date.now() - catalogCache.time < MAX_AGE) return catalogCache;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch("https://models.dev/catalog.json", { signal: controller.signal, credentials: "omit" });
+    const response = await fetch("https://models.dev/catalog.json", { signal: controller.signal, credentials: "omit", cache: "no-cache" });
     if (!response.ok) throw new Error("Pricing catalog unavailable");
     const data = await response.json();
-    const prices = parseLivePrices(data.providers);
+    const prices = parseLivePrices(data.providers, data.models);
     const metadata = parseModelMetadata(data);
     if (!prices.length) throw new Error("Pricing catalog was empty");
     const result = { time: Date.now(), prices, metadata };
     try { localStorage.setItem(CATALOG_KEY, JSON.stringify(result)); } catch { /* retain in memory */ }
     return result;
   } catch {
+    if (catalogCache && Array.isArray(catalogCache.prices) && Array.isArray(catalogCache.metadata)) return catalogCache;
+    try { catalogCache = JSON.parse(localStorage.getItem(PREVIOUS_CATALOG_KEY) || "null"); } catch { /* ignore a damaged cache */ }
     if (catalogCache && Array.isArray(catalogCache.prices) && Array.isArray(catalogCache.metadata)) return catalogCache;
     return { prices: cached && Array.isArray(cached.prices) ? cached.prices : [], metadata: [] };
   } finally {
@@ -115,7 +131,7 @@ export async function loadLivePrices(): Promise<{ prices: ModelInfo[]; metadata:
 
 export function livePricesUpdatedAt(): string | null {
   try {
-    const cached = JSON.parse(localStorage.getItem(CATALOG_KEY) || localStorage.getItem(KEY) || "null");
+    const cached = JSON.parse(localStorage.getItem(CATALOG_KEY) || localStorage.getItem(PREVIOUS_CATALOG_KEY) || localStorage.getItem(KEY) || "null");
     return typeof cached?.time === "number" && Number.isFinite(cached.time) ? new Date(cached.time).toLocaleString() : null;
   } catch { return null; }
 }

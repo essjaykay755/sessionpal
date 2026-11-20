@@ -87,12 +87,16 @@ The real path is resolved at runtime and shown in **Settings** and **Backups**.
 
 ## Cost estimates
 
-SessionPal refreshes public model rates from models.dev at most daily and caches
-them locally. The request sends no session data. Offline, it uses the last cached
+SessionPal checks models.dev for fresh rates when scanning with a catalog older
+than 24 hours. Refresh library checks immediately. The request sends no session
+data. Offline, SessionPal uses the last cached
 catalog and the bundled `src/lib/pricing-catalog.json` as a fallback. Free model
 IDs are matched only to a corresponding paid offering listed by the same provider;
-ambiguous or unavailable rates remain unpriced. Missing cache rates use the input
-rate. Current rates are estimates and may differ from historical or provider bills.
+the model maker’s rates take precedence for models with a verified identity.
+Ambiguous or unavailable rates remain unpriced. Antigravity costs use the model
+recorded for each generation, preferring the public model name when recorded.
+They require a rate for all recorded usage. Missing
+cache rates use the input rate. Current rates may differ from historical or provider bills.
 SessionPal does not know your subscription, credits, or provider
 billing. Every amount shown is an **API-equivalent estimate** and is labelled as
 such in the UI. Cache savings are computed from the same public table.
@@ -119,8 +123,8 @@ Interrupted and failed observations remain visible in session details but are
 excluded from completed-duration averages. Each timing kind is averaged
 separately, with its sample count; period averages use completion dates.
 API request latency is never inferred from chat timestamps. Sources without
-explicit API timing show it as unavailable. The current Antigravity reader
-exposes no per-message timestamps and therefore has no usable timing data.
+explicit API timing show it as unavailable. Antigravity activity uses message
+step timestamps from the conversation database where they match the search index.
 Timing is calculated locally from existing files and read-only database access;
 SessionPal does not intercept requests or change agent settings.
 
@@ -131,8 +135,8 @@ SessionPal does not intercept requests or change agent settings.
 - Token usage is only available where the agent recorded it. A session without
   usage metadata shows tokens as unknown rather than inventing numbers.
 - Daily usage charts place tokens on the day each message was recorded.
-  Database-backed OpenCode and Antigravity only store session totals, so their
-  usage is shown on the day the session was last active, and the chart says so.
+  For database-backed OpenCode and Antigravity, SessionPal places usage on the
+  day the session was last active.
 - Cursor transcripts depend on the shape of its internal key-value database.
 - Restoring a backup only writes back files that are missing. Existing files,
   including sessions that continued after the backup, are never overwritten,

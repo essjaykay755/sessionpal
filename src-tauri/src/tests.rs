@@ -834,7 +834,7 @@ fn pb_bytes(field: u64, value: &[u8], out: &mut Vec<u8>) {
     out.extend_from_slice(value);
 }
 
-fn antigravity_generation(model: &str, input: u64, output: u64, cached: u64) -> Vec<u8> {
+fn antigravity_generation(model: &str, label: Option<&str>, input: u64, output: u64, cached: u64) -> Vec<u8> {
     let mut usage = Vec::new();
     pb_number(1, 1402, &mut usage);
     pb_number(2, input, &mut usage);
@@ -843,6 +843,9 @@ fn antigravity_generation(model: &str, input: u64, output: u64, cached: u64) -> 
     let mut generation = Vec::new();
     pb_bytes(4, &usage, &mut generation);
     pb_bytes(19, model.as_bytes(), &mut generation);
+    if let Some(label) = label {
+        pb_bytes(21, label.as_bytes(), &mut generation);
+    }
     let mut outer = Vec::new();
     pb_bytes(1, &generation, &mut outer);
     outer
@@ -883,15 +886,29 @@ fn antigravity_fixture(dir: &Path) -> PathBuf {
 
     let conversations = dir.join("conversations");
     fs::create_dir_all(&conversations).unwrap();
-    for (id, model, input) in [("conv-1", "claude-opus-5-5-high", 1000), ("conv-sub", "gemini-3.8-flash", 500)] {
+    for (id, model, label, input) in [
+        ("conv-1", "claude-opus-5-5-high", None, 1000),
+        ("conv-sub", "gemini-4-neon-tiered", Some("Gemini 4 Neon (Extra)"), 550),
+    ] {
         let db = Connection::open(conversations.join(format!("{id}.db"))).unwrap();
         db.execute_batch("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB, size INTEGER);")
             .unwrap();
         db.execute(
             "INSERT INTO gen_metadata (idx, data, size) VALUES (0, ?1, 0)",
-            [antigravity_generation(model, input, 200, 5000)],
+            [antigravity_generation(model, label, input, 200, 5000)],
         )
         .unwrap();
+        if id == "conv-1" {
+            db.execute_batch("CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, metadata BLOB);").unwrap();
+            let start = chrono::DateTime::parse_from_rfc3339("2026-10-28T05:30:00Z").unwrap().timestamp() as u64;
+            for (idx, kind, offset) in [(0, 14, 0), (1, 15, 3), (2, 15, 4), (3, 15, 5), (4, 14, 1500), (5, 15, 1501)] {
+                let mut timestamp = Vec::new();
+                pb_number(1, start + offset, &mut timestamp);
+                let mut metadata = Vec::new();
+                pb_bytes(1, &timestamp, &mut metadata);
+                db.execute("INSERT INTO steps VALUES (?1, ?2, ?3)", rusqlite::params![idx, kind, metadata]).unwrap();
+            }
+        }
     }
     fs::write(conversations.join("conv-old.pb"), [0x26, 0x0f, 0x82]).unwrap();
     index
@@ -911,12 +928,20 @@ fn reads_antigravity_conversations() {
     assert_eq!(session.cwd, "/tmp/My App");
     assert_eq!(session.updated_at, "2026-10-28T06:00:19.308Z");
     assert!(!session.deletable);
-    assert_eq!(session.models, ["claude-opus-5-5", "gemini-3.8-flash"]);
+    assert_eq!(session.models, ["claude-opus-5-5", "gemini-4-neon"]);
     let usage = session.usage.as_ref().unwrap();
-    assert_eq!((usage.input, usage.output, usage.cache_read), (1500, 400, 10_000));
-    assert!(usage.cost.is_some(), "Claude generations are priced");
+    assert_eq!((usage.input, usage.output, usage.cache_read), (1550, 400, 10_000));
+    assert_eq!(usage.cost, Some(0.0144));
+    let timing = session.timing.as_ref().unwrap();
+    assert_eq!(timing.event_count, 4, "ignore empty indexed text and unindexed steps");
+    assert_eq!(timing.elapsed_ms, Some(1_500_000));
+    assert_eq!(timing.activity_intervals.len(), 1);
+    let interval = &timing.activity_intervals[0];
+    assert_eq!(interval.end_ms - interval.start_ms, 5000);
+    assert!(timing.entries.is_empty());
 
     let detail = antigravity::detail(&index, "conv-1").unwrap();
+    assert_eq!(detail.summary.timing.as_ref().unwrap().elapsed_ms, timing.elapsed_ms);
     let transcript: Vec<(&str, &str)> = detail
         .messages
         .iter()
@@ -942,6 +967,12 @@ fn reads_antigravity_conversations() {
         .query_row("SELECT COUNT(*) FROM conversation_summaries", [], |row| row.get(0))
         .unwrap();
     assert_eq!(rows, 2);
+
+    let child = Connection::open(dir.path().join("conversations/conv-sub.db")).unwrap();
+    child.execute("UPDATE gen_metadata SET data = ?1", [antigravity_generation("gemini-pro-default", None, 550, 200, 5000)]).unwrap();
+    let rescanned = antigravity::scan(&[index]);
+    assert_eq!(rescanned[0].models, ["claude-opus-5-5", "gemini-pro-default"]);
+    assert_eq!(rescanned[0].usage.as_ref().unwrap().cost, None);
 }
 
 #[cfg(unix)]
@@ -1005,7 +1036,7 @@ fn codex_usage_is_split_by_the_day_it_happened() {
 
 #[test]
 fn pricing_catalog_is_shared_and_complete() {
-    assert_eq!(crate::pricing::catalog_len(), 19);
+    assert_eq!(crate::pricing::catalog_len(), 20);
     // Dated snapshots resolve to their base model; unknown models stay unpriced.
     assert_eq!(
         crate::pricing::estimate("claude-sonnet-4-5-20250929", 1_000_000, 0, 0, 0),

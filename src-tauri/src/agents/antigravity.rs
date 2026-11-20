@@ -5,7 +5,7 @@
 //! token usage. The `.pb` conversation files are encrypted and never read.
 //! Everything is opened read-only.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,8 @@ use rusqlite::Connection;
 
 use crate::models::{AgentId, Message, SessionDetail, SessionSummary, UsageBreakdown};
 use crate::pricing;
-use crate::util::{display_path, excerpt, file_size, iso_from_system_time, iso_now, project_info, truncate_chars};
+use crate::timing::Collector;
+use crate::util::{display_path, excerpt, file_size, is_injected_context, iso_from_system_time, iso_now, project_info, truncate_chars};
 
 use super::RelatedFile;
 use crate::scan_cache::{sqlite_files, SummaryCache};
@@ -150,6 +151,12 @@ struct Segment {
     text: String,
 }
 
+#[derive(Default)]
+struct Transcript {
+    segments: Vec<Segment>,
+    activity_steps: HashSet<i64>,
+}
+
 /// The index stores each side of the conversation as one body of text plus a
 /// list of `[step, byte offset]` pairs marking where each step starts.
 fn split_body(offsets: &str, body: &str, role: &'static str, into: &mut Vec<Segment>) {
@@ -184,12 +191,12 @@ fn split_body(offsets: &str, body: &str, role: &'static str, into: &mut Vec<Segm
     }
 }
 
-fn transcript(connection: &Connection, id: &str) -> Vec<Segment> {
+fn transcript(connection: &Connection, id: &str) -> Transcript {
     let Ok(mut statement) = connection.prepare(
         "SELECT c8, c9, c13, c14 FROM conversations_fts_content \
          WHERE c0 = ?1 AND CAST(c1 AS INTEGER) >= 0 ORDER BY CAST(c1 AS INTEGER)",
     ) else {
-        return Vec::new();
+        return Transcript::default();
     };
     // Offsets are stored as text or as blobs, depending on the version.
     let text = |row: &rusqlite::Row<'_>, index: usize| -> rusqlite::Result<String> {
@@ -202,7 +209,7 @@ fn transcript(connection: &Connection, id: &str) -> Vec<Segment> {
     let Ok(rows) = statement.query_map([id], |row| {
         Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?, text(row, 3)?))
     }) else {
-        return Vec::new();
+        return Transcript::default();
     };
     let mut segments = Vec::new();
     for (user_offsets, agent_offsets, user_body, agent_body) in rows.flatten() {
@@ -210,6 +217,8 @@ fn transcript(connection: &Connection, id: &str) -> Vec<Segment> {
         split_body(&agent_offsets, &agent_body, "assistant", &mut segments);
     }
     segments.sort_by_key(|segment| segment.step);
+    let activity_steps = segments.iter().filter(|segment| !is_injected_context(&segment.text))
+        .map(|segment| segment.step).collect();
     // Consecutive agent steps read as one reply.
     let mut merged: Vec<Segment> = Vec::new();
     for segment in segments {
@@ -221,7 +230,7 @@ fn transcript(connection: &Connection, id: &str) -> Vec<Segment> {
             _ => merged.push(segment),
         }
     }
-    merged
+    Transcript { segments: merged, activity_steps }
 }
 
 // ---------------------------------------------------------------------------
@@ -230,8 +239,29 @@ fn transcript(connection: &Connection, id: &str) -> Vec<Segment> {
 
 #[derive(Default)]
 struct Generations {
-    usage: UsageBreakdown,
+    usage_by_model: BTreeMap<Option<String>, UsageBreakdown>,
     models: Vec<String>,
+}
+
+impl Generations {
+    fn usage(&self) -> Option<UsageBreakdown> {
+        let mut total = UsageBreakdown { cost: Some(0.0), ..UsageBreakdown::default() };
+        for (model, usage) in &self.usage_by_model {
+            if usage.is_empty() {
+                continue;
+            }
+            total.input = total.input.saturating_add(usage.input);
+            total.output = total.output.saturating_add(usage.output);
+            total.cache_read = total.cache_read.saturating_add(usage.cache_read);
+            total.cost = total.cost.and_then(|cost| {
+                let id = model.as_deref()?;
+                pricing::estimate(id, usage.input, usage.output, usage.cache_read, 0)
+                    .map(|amount| cost + amount)
+            });
+        }
+        total.cost = total.cost.map(|cost| (cost * 10_000.0).round() / 10_000.0);
+        (!total.is_empty()).then_some(total)
+    }
 }
 
 fn varint(bytes: &[u8], index: &mut usize) -> Option<u64> {
@@ -292,10 +322,45 @@ fn message_field(bytes: &[u8], number: u64) -> Option<&[u8]> {
     })
 }
 
+fn step_timestamp(metadata: &[u8]) -> Option<DateTime<Utc>> {
+    // Step metadata field 1 is the creation time (google.protobuf.Timestamp).
+    let mut seconds = None;
+    let mut nanos = 0;
+    for (field, value) in fields(message_field(metadata, 1)?) {
+        match (field, value) {
+            (1, Field::Number(value)) if seconds.is_none() => seconds = Some(i64::try_from(value).ok()?),
+            (2, Field::Number(value)) if value < 1_000_000_000 => nanos = value as u32,
+            _ => return None,
+        }
+    }
+    DateTime::from_timestamp(seconds.filter(|seconds| *seconds > 0)?, nanos)
+}
+
+fn read_activity(connection: &Connection, steps: &HashSet<i64>, timing: &mut Collector) {
+    if steps.is_empty() {
+        return;
+    }
+    // The search index maps user and assistant text to these exact step IDs.
+    // Require a matching message step before using its stored timestamp.
+    let Ok(mut statement) = connection.prepare("SELECT idx, metadata FROM steps WHERE step_type IN (14, 15)") else {
+        return;
+    };
+    let Ok(rows) = statement.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?))) else {
+        return;
+    };
+    for (step, metadata) in rows.flatten() {
+        if steps.contains(&step) {
+            if let Some(stamp) = step_timestamp(&metadata) {
+                timing.activity_millis(stamp.timestamp_millis());
+            }
+        }
+    }
+}
+
 /// `claude-opus-5-5-high` → `claude-opus-5-5`: the suffix is a thinking level.
 fn model_id(raw: &str) -> String {
     let mut model = raw.trim().to_ascii_lowercase();
-    for suffix in ["-high", "-medium", "-low", "-max", "-thinking", "-control"] {
+    for suffix in ["-xhigh", "-high", "-medium", "-low", "-max", "-thinking", "-control"] {
         if let Some(stripped) = model.strip_suffix(suffix) {
             model = stripped.to_string();
             break;
@@ -304,10 +369,33 @@ fn model_id(raw: &str) -> String {
     pricing::canonical_model(&model)
 }
 
-fn read_generations(db: &Path, into: &mut Generations) {
-    let Ok(connection) = open_read_only(db) else {
-        return;
+fn displayed_model_id(label: &str) -> Option<String> {
+    let label = label.trim().to_ascii_lowercase();
+    let name = match label.split_once(" (") {
+        Some((name, level)) if matches!(level, "low)" | "medium)" | "high)" | "extra)" | "xhigh)" | "max)" | "thinking)") => name,
+        Some(_) => return None,
+        None => label.as_str(),
     };
+    let words: Vec<_> = name.split_ascii_whitespace().collect();
+    let version = match words.as_slice() {
+        ["gemini", version, _, ..] | ["claude", "opus" | "sonnet" | "haiku", version] => version,
+        _ => return None,
+    };
+    if !version.split('.').all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        || !name.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'-' | b'.'))
+    {
+        return None;
+    }
+    let id = words.join("-");
+    match words[0] {
+        "claude" => Some(id.replace('.', "-")),
+        // Antigravity's label omits Preview from this published API ID.
+        "gemini" if id == "gemini-3.1-pro" => Some("gemini-3.1-pro-preview".into()),
+        _ => Some(id),
+    }
+}
+
+fn read_generations(connection: &Connection, into: &mut Generations) {
     let Ok(mut statement) = connection.prepare("SELECT data FROM gen_metadata ORDER BY idx") else {
         return;
     };
@@ -318,27 +406,31 @@ fn read_generations(db: &Path, into: &mut Generations) {
         let Some(generation) = message_field(&data, 1) else {
             continue;
         };
-        if let Some(model) = message_field(generation, 19)
+        let label = |field| message_field(generation, field)
             .and_then(|raw| std::str::from_utf8(raw).ok())
-            .filter(|raw| !raw.trim().is_empty())
-            .map(model_id)
-        {
-            if !into.models.contains(&model) {
-                into.models.push(model);
+            .filter(|raw| !raw.trim().is_empty());
+        // The public display name can identify a model when the serving ID is
+        // an internal router or experiment. Keep the serving ID as a fallback.
+        let model = label(21).and_then(displayed_model_id)
+            .or_else(|| label(19).map(model_id));
+        if let Some(id) = &model {
+            if !into.models.contains(id) {
+                into.models.push(id.clone());
             }
         }
         let Some(usage) = message_field(generation, 4) else {
             continue;
         };
+        let totals = into.usage_by_model.entry(model).or_default();
         for (field, value) in fields(usage) {
             let Field::Number(count) = value else {
                 continue;
             };
             match field {
                 // Uncached input, output (thinking included) and cached input.
-                2 => into.usage.input = into.usage.input.saturating_add(count),
-                3 => into.usage.output = into.usage.output.saturating_add(count),
-                5 => into.usage.cache_read = into.usage.cache_read.saturating_add(count),
+                2 => totals.input = totals.input.saturating_add(count),
+                3 => totals.output = totals.output.saturating_add(count),
+                5 => totals.cache_read = totals.cache_read.saturating_add(count),
                 _ => {}
             }
         }
@@ -464,9 +556,9 @@ pub fn detail(index: &Path, id: &str) -> Result<SessionDetail, String> {
         .iter()
         .find(|row| row.id == id)
         .ok_or_else(|| "That Antigravity conversation no longer exists.".to_string())?;
-    let segments = transcript(&loaded.connection, &row.id);
-    let summary = summarize(&loaded, index, row, &segments);
-    let messages = segments
+    let transcript = transcript(&loaded.connection, &row.id);
+    let summary = summarize(&loaded, index, row, &transcript);
+    let messages = transcript.segments
         .iter()
         .enumerate()
         .map(|(position, segment)| Message {
@@ -493,23 +585,25 @@ pub fn detail(index: &Path, id: &str) -> Result<SessionDetail, String> {
     })
 }
 
-fn summarize(loaded: &Loaded, index: &Path, row: &Row, segments: &[Segment]) -> SessionSummary {
+fn summarize(loaded: &Loaded, index: &Path, row: &Row, transcript_data: &Transcript) -> SessionSummary {
     let ids = family(loaded, &row.id);
     let files = conversation_files(index, &ids);
     let mut generations = Generations::default();
+    let mut timing = Collector::default();
     for file in &files {
-        read_generations(file, &mut generations);
+        let Ok(connection) = open_read_only(file) else { continue; };
+        read_generations(&connection, &mut generations);
+        let Some(id) = file.file_stem().and_then(|id| id.to_str()) else { continue; };
+        if id == row.id {
+            read_activity(&connection, &transcript_data.activity_steps, &mut timing);
+        } else {
+            let child = transcript(&loaded.connection, id);
+            read_activity(&connection, &child.activity_steps, &mut timing);
+        }
     }
     let model = generations.models.first().cloned();
-    let mut usage = generations.usage;
-    usage.cost = generations
-        .models
-        .iter()
-        .find_map(|model| {
-            pricing::estimate(model, usage.input, usage.output, usage.cache_read, usage.cache_write)
-        })
-        .map(|cost| (cost * 10_000.0).round() / 10_000.0);
-    let usage = (!usage.is_empty()).then_some(usage);
+    let usage = generations.usage();
+    let segments = &transcript_data.segments;
 
     let user_text = segments.iter().find(|segment| segment.role == "user").map(|s| s.text.as_str());
     let agent_text = segments
@@ -547,7 +641,7 @@ fn summarize(loaded: &Loaded, index: &Path, row: &Row, segments: &[Segment]) -> 
         .unwrap_or_else(|| updated.clone());
 
     SessionSummary {
-        timing: None, // This source exposes no per-message timestamps.
+        timing: timing.finish(),
         id: row.id.clone(),
         agent: AgentId::Antigravity,
         title,

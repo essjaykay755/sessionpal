@@ -2,7 +2,7 @@
 
 **Your AI coding sessions, all in one place.**
 
-Latest release: **v0.6.2** — clearer session navigation and usage information.
+Latest release **v0.6.3** adds Antigravity project timing and improves automatic model pricing.
 
 SessionPal is a local-first desktop library for sessions from **Claude Code, Codex, Cursor, OpenCode, and Google Antigravity**. Find past conversations, explore usage, and back up sessions on your own computer.
 

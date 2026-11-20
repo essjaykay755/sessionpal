@@ -7,7 +7,7 @@ async function load(entry) {
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
 }
 const { timingStats, timingDuration } = await load('src/lib/timing.ts');
-const { projectCostStats } = await load('src/lib/analytics.ts');
+const { projectCostStats, usageTotals } = await load('src/lib/analytics.ts');
 const base = new Date('2026-11-05T09:00:00').getTime();
 const iso = (ms) => new Date(ms).toISOString();
 const session = (id, start = base, end = base + 600_000, overrides = {}) => ({
@@ -20,6 +20,17 @@ const session = (id, start = base, end = base + 600_000, overrides = {}) => ({
 });
 const entry = (id, kind, durationMs, status = 'completed', ttft = null) => ({
   id, source: 'test', kind, durationMs, status, timestamp: iso(base + 5000), timeToFirstTokenMs: ttft,
+});
+
+test('usage totals include Antigravity costs computed per model', () => {
+  const mixed = { models: ['a', 'b'], usage: { input: 5, output: 10, cacheRead: 0, cacheWrite: 0, cost: 0.0144 } };
+  const antigravity = session('a', base, base, { ...mixed, agent: 'antigravity' });
+  const codex = session('b', base, base, mixed);
+  const unknown = session('c', base, base, { ...antigravity, usage: { ...mixed.usage, cost: null } });
+  const totals = usageTotals([antigravity, codex, unknown]);
+  assert.equal(totals.pricedSessions, 1);
+  assert.equal(totals.cost, 0.0144);
+  assert.equal(totals.tokens, 45);
 });
 
 test('project activity is the union of overlapping and nested sessions', () => {

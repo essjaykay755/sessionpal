@@ -360,14 +360,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const loadNative = useCallback(
-    async (scope?: { agents: AgentId[]; access: ProjectAccess }) => {
+    async (scope?: { agents: AgentId[]; access: ProjectAccess }, refreshPrices = false) => {
       if (!isTauri) return null;
       const agents = scope?.agents ?? settingsRef.current.enabledAgents;
       const access = scope?.access ?? settingsRef.current.projectAccess;
       setLoading(true);
       setError(null);
       try {
-        const { prices, metadata } = await loadLivePrices();
+        const { prices, metadata } = await loadLivePrices(refreshPrices);
         setLiveMetadata(metadata);
         try {
           await setPricingCatalog(prices);
@@ -614,7 +614,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       return;
     }
-    const count = await loadNative();
+    const count = await loadNative(undefined, true);
     if (count !== null) {
       addActivity({
         kind: "scan",

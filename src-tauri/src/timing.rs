@@ -87,8 +87,12 @@ pub fn genuine_content(value: &Value) -> bool {
 impl Collector {
     pub fn activity(&mut self, value: &Value) {
         if let Some(ms) = millis(value) {
-            self.stamps.insert(ms);
+            self.activity_millis(ms);
         }
+    }
+
+    pub(crate) fn activity_millis(&mut self, ms: i64) {
+        self.stamps.insert(ms);
     }
 
     pub fn claude(&mut self, value: &Value) {

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{AgentDetection, AgentId, SessionSummary};
 
-const FORMAT: u32 = 2;
+const FORMAT: u32 = 3;
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SESSIONS_FILE: &str = "library-sessions.json";
 const DETECTIONS_FILE: &str = "library-agents.json";
@@ -267,7 +267,7 @@ mod timing_cache_tests {
 
     #[test]
     fn summaries_and_library_saved_before_timing_are_invalidated() {
-        for format in [1, FORMAT] {
+        for format in [FORMAT - 1, FORMAT] {
             let saved = serde_json::to_vec(&serde_json::json!({
                 "format": format, "version": APP_VERSION, "entries": []
             })).unwrap();

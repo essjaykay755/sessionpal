@@ -958,7 +958,7 @@ function ExplainCostsDialog({ open, onClose }: { open: boolean; onClose: () => v
               <EstimatedTag />
             </div>
             <p className="mt-1 text-12 leading-relaxed text-muted">
-              Estimates use current short-context API rates, including paid equivalents of recognized free models. Rates refresh from models.dev and may differ by provider. Missing cache rates use the input rate. Subscription usage, discounts and long-context rates are not included.
+              Estimates use current short-context API rates, including paid equivalents of recognized free models. SessionPal prefers the model maker’s rate from models.dev when available. Refresh library checks for current prices. Missing cache rates use the input rate. Subscription usage, discounts and long-context rates are not included.
             </p>
             <p className="mt-1 text-11 text-faint">{updatedAt ? `models.dev prices last updated: ${updatedAt}.` : "Online prices have not been loaded yet."}</p>
           </div>
