@@ -91,6 +91,12 @@ impl Collector {
         }
     }
 
+    pub fn activity_iso(&mut self, stamp: &str) {
+        if let Ok(time) = chrono::DateTime::parse_from_rfc3339(stamp) {
+            self.activity_millis(time.timestamp_millis());
+        }
+    }
+
     pub(crate) fn activity_millis(&mut self, ms: i64) {
         self.stamps.insert(ms);
     }

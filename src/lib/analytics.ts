@@ -288,35 +288,88 @@ export interface ModelStat {
 export function modelStats(sessions: SessionSummary[], window?: DayWindow): ModelStat[] {
   const map = new Map<string, ModelStat>();
   let totalTokens = 0;
-  for (const session of sessions) {
-    const usage = usageInWindow(session, window);
-    if (!usage || !session.model) continue;
-    const tokens = usageTokens(usage);
-    const cost = canEstimateSessionCost(session) ? usage.cost ?? 0 : 0;
+
+  const addEntry = (
+    modelId: string,
+    tokens: number,
+    cost: number | null,
+    seenInSession: Set<string>,
+    mixedFallback = false,
+    fallbackModel?: string | null,
+  ) => {
+    if (tokens <= 0) return;
     totalTokens += tokens;
-    const mixed = new Set(session.models.filter(Boolean)).size > 1;
-    const modelId = mixed ? "__multiple_models__" : session.model;
+    const isNewForSession = !seenInSession.has(modelId);
+    seenInSession.add(modelId);
     const current = map.get(modelId);
     if (current) {
       current.tokens += tokens;
-      current.cost += cost;
-      current.costKnown &&= canEstimateSessionCost(session);
-      current.sessions += 1;
+      if (cost !== null) current.cost += cost;
+      current.costKnown &&= cost !== null;
+      if (isNewForSession) current.sessions += 1;
     } else {
-      const info = modelInfo(session.model);
+      const info = modelInfo(mixedFallback ? fallbackModel : modelId);
       map.set(modelId, {
         id: modelId,
-        label: mixed ? "Multiple models" : info.label,
+        label: mixedFallback ? "Multiple models" : info.label,
         color: info.color,
-        family: mixed ? "Mixed session" : info.family,
+        family: mixedFallback ? "Mixed session" : info.family,
         tokens,
-        cost,
-        costKnown: canEstimateSessionCost(session),
+        cost: cost ?? 0,
+        costKnown: cost !== null,
         sessions: 1,
         share: 0,
       });
     }
+  };
+
+  for (const session of sessions) {
+    const seenInSession = new Set<string>();
+    // 1. Prefer exact per-day, per-model records when present.
+    if (hasDatedUsage(session)) {
+      const daysInWindow = (session.usageDays ?? []).filter(
+        (day) => !window || (day.day >= window.from && day.day <= window.to),
+      );
+      if (daysInWindow.length === 0) continue;
+      const hasPerModel = daysInWindow.some((day) => day.models && day.models.length > 0);
+      if (hasPerModel) {
+        for (const day of daysInWindow) {
+          if (day.models && day.models.length > 0) {
+            for (const item of day.models) {
+              const tokens = usageTokens(item);
+              addEntry(item.model, tokens, item.cost, seenInSession);
+            }
+          } else if (session.model) {
+            const mixed = new Set(session.models.filter(Boolean)).size > 1;
+            const modelId = mixed ? "__multiple_models__" : session.model;
+            const cost = canEstimateSessionCost(session) ? day.cost : null;
+            addEntry(modelId, usageTokens(day), cost, seenInSession, mixed, session.model);
+          }
+        }
+        continue;
+      }
+    }
+
+    // 2. Undated sessions with explicit per-model totals (e.g. Antigravity).
+    if (!hasDatedUsage(session) && session.modelUsage && session.modelUsage.length > 0) {
+      const updated = dateKey(new Date(session.updatedAt));
+      if (window && (updated < window.from || updated > window.to)) continue;
+      for (const item of session.modelUsage) {
+        addEntry(item.model, usageTokens(item), item.cost, seenInSession);
+      }
+      continue;
+    }
+
+    // 3. Session-level fallback when no per-model split was recorded.
+    const usage = usageInWindow(session, window);
+    if (!usage || !session.model) continue;
+    const tokens = usageTokens(usage);
+    const mixed = new Set(session.models.filter(Boolean)).size > 1;
+    const modelId = mixed ? "__multiple_models__" : session.model;
+    const cost = canEstimateSessionCost(session) ? usage.cost : null;
+    addEntry(modelId, tokens, cost, seenInSession, mixed, session.model);
   }
+
   const stats = Array.from(map.values()).sort((a, b) => b.tokens - a.tokens);
   for (const stat of stats) {
     stat.share = totalTokens ? (stat.tokens / totalTokens) * 100 : 0;

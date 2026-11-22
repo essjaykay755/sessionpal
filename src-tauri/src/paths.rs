@@ -112,9 +112,11 @@ pub fn candidate_roots() -> AgentRoots {
     let mut codex = Vec::new();
     if let Some(home) = env_path("CODEX_HOME") {
         push_unique(&mut codex, home.join("sessions"));
+        push_unique(&mut codex, home.join("archived_sessions"));
     }
     if let Some(home) = home() {
         push_unique(&mut codex, home.join(".codex").join("sessions"));
+        push_unique(&mut codex, home.join(".codex").join("archived_sessions"));
     }
     roots.codex = codex;
 
@@ -385,9 +387,17 @@ pub fn validate_restore_target(
         (AgentId::Antigravity, _) => {
             return Err("Antigravity's storage is read-only and is never restored.".to_string());
         }
-        (AgentId::Claude, _) | (AgentId::Codex, _) => {
+        (AgentId::Claude, _) => {
             if normalized.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
                 return Err("Agent session archives must restore JSONL files.".to_string());
+            }
+        }
+        (AgentId::Codex, _) => {
+            if !crate::agents::codex::is_rollout_file(&normalized) {
+                return Err(
+                    "Codex session archives must restore JSONL or compressed JSONL files."
+                        .to_string(),
+                );
             }
         }
         (AgentId::Opencode, _) => {

@@ -1,6 +1,6 @@
 [package]
 name = "sessionpal"
-version = "0.6.3"
+version = "0.7.0"
 description = "A local-first desktop library for AI coding agent sessions."
 authors = ["Subhojit Karmakar"]
 homepage = "https://sessionpal.essjaykay.dev"
@@ -26,6 +26,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
 walkdir = "2"
+zstd = "0.13"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 trash = "5"

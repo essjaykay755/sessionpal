@@ -1081,14 +1081,24 @@ function withUsageDays(session: SessionSummary): SessionSummary {
     const base = Math.floor(value / keys.length);
     return index === keys.length - 1 ? value - base * (keys.length - 1) : base;
   };
-  const usageDays: DayUsage[] = keys.map((key, index) => ({
-    day: key,
-    input: share(usage.input, index),
-    output: share(usage.output, index),
-    cacheRead: share(usage.cacheRead, index),
-    cacheWrite: share(usage.cacheWrite, index),
-    cost: usage.cost === null ? null : usage.cost / keys.length,
-  }));
+  const usageDays: DayUsage[] = keys.map((key, index) => {
+    const input = share(usage.input, index);
+    const output = share(usage.output, index);
+    const cacheRead = share(usage.cacheRead, index);
+    const cacheWrite = share(usage.cacheWrite, index);
+    const cost = usage.cost === null ? null : usage.cost / keys.length;
+    return {
+      day: key,
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      cost,
+      models: session.model
+        ? [{ model: session.model, input, output, cacheRead, cacheWrite, cost }]
+        : undefined,
+    };
+  });
   return { ...session, usageDays };
 }
 

@@ -69,6 +69,28 @@ impl UsageBreakdown {
     }
 }
 
+/// Token usage attributed to a single model.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsage {
+    pub model: String,
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    /// `None` when this model has no known price.
+    pub cost: Option<f64>,
+}
+
+impl ModelUsage {
+    pub fn tokens(&self) -> u64 {
+        self.input
+            .saturating_add(self.output)
+            .saturating_add(self.cache_read)
+            .saturating_add(self.cache_write)
+    }
+}
+
 /// Token usage that happened on one local calendar day (`YYYY-MM-DD`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,6 +102,9 @@ pub struct DayUsage {
     pub cache_write: u64,
     /// `None` when any usage that day came from a model without a known price.
     pub cost: Option<f64>,
+    /// Per-model token breakdown for this day, sorted descending by total tokens.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<ModelUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +160,10 @@ pub struct SessionSummary {
     /// timestamps. Empty when the source has no per-message timestamps.
     #[serde(default)]
     pub usage_days: Vec<DayUsage>,
+    /// Per-model usage breakdown for sessions without per-day timestamps
+    /// (such as Antigravity) where multiple models can appear in one session.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub model_usage: Vec<ModelUsage>,
     pub format: String,
     pub path: String,
     pub deletable: bool,

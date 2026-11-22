@@ -7,6 +7,22 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.7.0] - 2026-11-22
+
+### Added
+
+- Explore model activity in a year, month, or week calendar, filter by agent or model, and inspect associated sessions.
+- Discover archived Codex sessions and read compressed JSONL rollouts.
+
+### Changed
+
+- Attribute daily usage and estimated costs to individual models when recorded, including multi-model Antigravity sessions.
+- Scan Codex history in parallel and handle large rollout records more efficiently.
+
+### Fixed
+
+- Improve model pricing and usage calculations for sessions with model changes and cached tokens.
+
 ## [0.6.3] - 2026-11-21
 
 ### Added

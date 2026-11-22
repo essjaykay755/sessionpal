@@ -2,16 +2,17 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::Value;
 use walkdir::WalkDir;
 
 use crate::models::{AgentId, Message, SessionDetail, SessionSummary, UsageBreakdown};
 use crate::pricing;
 use crate::util::{
-    is_injected_context,
-    collapse_whitespace, earlier, excerpt, file_size, file_times, iso_now, later, parse_time,
-    project_info, truncate_chars,
+    collapse_whitespace, earlier, excerpt, file_size, file_times, is_injected_context, iso_now,
+    later, parse_time, project_info, truncate_chars,
 };
 
 use super::ParsedSession;
@@ -20,6 +21,33 @@ use crate::scan_cache::SummaryCache;
 const MAX_TEXT: usize = 120_000;
 const MAX_TOOL_CONTENT: usize = 24_000;
 const MAX_TOOL_DETAIL: usize = 420;
+const LARGE_LINE_THRESHOLD: usize = 64 * 1024;
+const MAX_RETAINED_LINE_BYTES: usize = 1024 * 1024;
+
+/// Codex stores recent rollouts as `.jsonl` and compresses older or archived
+/// rollouts in place as `.jsonl.zst`.
+pub fn is_rollout_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".jsonl") || name.ends_with(".jsonl.zst"))
+}
+
+fn is_zstd_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".jsonl.zst"))
+}
+
+fn open_rollout_reader(path: &Path) -> Result<Box<dyn BufRead>, String> {
+    let file = File::open(path).map_err(|error| format!("Could not open session: {error}"))?;
+    if is_zstd_file(path) {
+        let decoder = zstd::stream::read::Decoder::new(BufReader::with_capacity(64 * 1024, file))
+            .map_err(|error| format!("Could not decompress session: {error}"))?;
+        Ok(Box::new(BufReader::with_capacity(128 * 1024, decoder)))
+    } else {
+        Ok(Box::new(BufReader::with_capacity(128 * 1024, file)))
+    }
+}
 
 pub fn count_sessions(roots: &[PathBuf]) -> u64 {
     let mut count = 0;
@@ -29,9 +57,7 @@ pub fn count_sessions(roots: &[PathBuf]) -> u64 {
             .into_iter()
             .filter_map(Result::ok)
         {
-            if entry.file_type().is_file()
-                && entry.path().extension().and_then(|ext| ext.to_str()) == Some("jsonl")
-            {
+            if entry.file_type().is_file() && is_rollout_file(entry.path()) {
                 count += 1;
             }
         }
@@ -60,7 +86,12 @@ fn load_session_titles(home: &Path) -> HashMap<String, String> {
 
 fn index_for_session(path: &Path) -> HashMap<String, String> {
     path.ancestors()
-        .find(|ancestor| ancestor.file_name().and_then(|name| name.to_str()) == Some("sessions"))
+        .find(|ancestor| {
+            matches!(
+                ancestor.file_name().and_then(|name| name.to_str()),
+                Some("sessions" | "archived_sessions")
+            )
+        })
         .and_then(Path::parent)
         .map(load_session_titles)
         .unwrap_or_default()
@@ -69,33 +100,83 @@ fn index_for_session(path: &Path) -> HashMap<String, String> {
 static CACHE: SummaryCache = SummaryCache::new("codex");
 
 pub fn scan(roots: &[PathBuf]) -> Vec<SessionSummary> {
-    let mut sessions = Vec::new();
+    let mut title_maps: Vec<HashMap<String, String>> = Vec::with_capacity(roots.len());
+    let mut files: Vec<(PathBuf, usize, u64)> = Vec::new();
     let mut seen = HashSet::new();
+
     for root in roots {
-        let titles = root.parent().map(load_session_titles).unwrap_or_default();
+        let map_index = title_maps.len();
+        title_maps.push(root.parent().map(load_session_titles).unwrap_or_default());
         for entry in WalkDir::new(root)
             .follow_links(false)
             .into_iter()
             .filter_map(Result::ok)
         {
-            if !entry.file_type().is_file()
-                || entry.path().extension().and_then(|ext| ext.to_str()) != Some("jsonl")
-            {
+            if !entry.file_type().is_file() || !is_rollout_file(entry.path()) {
                 continue;
             }
-            seen.insert(entry.path().to_path_buf());
-            let summary = CACHE.get_or_parse(entry.path(), || {
-                parse_file(entry.path(), false).ok().map(|parsed| parsed.summary)
-            });
-            // Titles live in a separate index, so apply them after the cache.
-            if let Some(mut summary) = summary {
-                if let Some(title) = titles.get(&summary.id) {
-                    summary.title = title.clone();
-                }
-                sessions.push(summary);
+            let path = entry.path().to_path_buf();
+            if seen.insert(path.clone()) {
+                let len = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+                files.push((path, map_index, len));
             }
         }
     }
+
+    // Start the largest rollouts first so work-stealing keeps all threads busy
+    // on a cold scan of compressed history.
+    files.sort_by(|a, b| b.2.cmp(&a.2));
+
+    let parse_one = |(path, map_index, _): &(PathBuf, usize, u64)| -> Option<SessionSummary> {
+        let mut summary = CACHE.get_or_parse(path, || {
+            parse_file(path, false).ok().map(|parsed| parsed.summary)
+        })?;
+        // Titles live in a separate index, so apply them after the cache.
+        if let Some(title) = title_maps[*map_index].get(&summary.id) {
+            summary.title = title.clone();
+        }
+        Some(summary)
+    };
+
+    let sessions = if files.len() <= 4 {
+        files.iter().filter_map(parse_one).collect()
+    } else {
+        let workers = std::thread::available_parallelism()
+            .map(|count| count.get().min(8))
+            .unwrap_or(4)
+            .min(files.len());
+        let cursor = AtomicUsize::new(0);
+        let mut results: Vec<Vec<SessionSummary>> = Vec::with_capacity(workers);
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..workers)
+                .map(|_| {
+                    let files_ref = &files;
+                    let cursor_ref = &cursor;
+                    let parse_ref = &parse_one;
+                    scope.spawn(move || {
+                        let mut local = Vec::new();
+                        loop {
+                            let idx = cursor_ref.fetch_add(1, Ordering::Relaxed);
+                            let Some(item) = files_ref.get(idx) else {
+                                break;
+                            };
+                            if let Some(summary) = parse_ref(item) {
+                                local.push(summary);
+                            }
+                        }
+                        local
+                    })
+                })
+                .collect();
+            for handle in handles {
+                if let Ok(local) = handle.join() {
+                    results.push(local);
+                }
+            }
+        });
+        results.into_iter().flatten().collect()
+    };
+
     CACHE.finish_scan(&seen);
     sessions
 }
@@ -152,9 +233,12 @@ struct Builder {
     assistant_text: Option<String>,
     created: Option<String>,
     updated: Option<String>,
+    first_model: Option<String>,
     model: Option<String>,
     models: HashSet<String>,
     totals: TokenTotals,
+    prev_cumulative: TokenTotals,
+    prev_raw_input: u64,
     usage_days: crate::util::UsageDays,
     messages: Vec<Message>,
     message_count: u64,
@@ -171,9 +255,12 @@ impl Builder {
             assistant_text: None,
             created: None,
             updated: None,
+            first_model: None,
             model: None,
             models: HashSet::new(),
             totals: TokenTotals::new(),
+            prev_cumulative: TokenTotals::new(),
+            prev_raw_input: 0,
             usage_days: crate::util::UsageDays::default(),
             messages: Vec::new(),
             message_count: 0,
@@ -199,6 +286,11 @@ impl Builder {
             return;
         }
         let canonical = pricing::canonical_model(raw);
+        if self.first_model.is_none() {
+            self.first_model = Some(canonical.clone());
+            self.usage_days
+                .attribute_unassigned(&canonical, pricing::estimate);
+        }
         self.models.insert(canonical.clone());
         self.model = Some(canonical);
     }
@@ -211,26 +303,179 @@ impl Builder {
     }
 }
 
+fn prefix_utf8(text: &str, max_bytes: usize) -> &str {
+    let mut end = max_bytes.min(text.len());
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+fn extract_json_str<'a>(haystack: &'a str, key_pat: &str) -> Option<&'a str> {
+    let start = haystack.find(key_pat)? + key_pat.len();
+    let rest = &haystack[start..];
+    let end = rest.find('"')?;
+    let value = &rest[..end];
+    (!value.contains('\\')).then_some(value)
+}
+
+fn parse_rfc3339_utc(text: &str) -> Option<String> {
+    DateTime::parse_from_rfc3339(text.trim()).ok().map(|time| {
+        time.with_timezone(&Utc)
+            .to_rfc3339_opts(SecondsFormat::Millis, true)
+    })
+}
+
+/// Fast path for huge summary-only lines (typically multi-megabyte base64
+/// attachments, tool outputs, or compaction blobs). Falls back to full JSON
+/// parsing whenever the prefix does not match unambiguously.
+fn try_fast_skip_large_line(
+    line: &str,
+    builder: &mut Builder,
+    timing: &mut crate::timing::Collector,
+) -> bool {
+    let prefix = prefix_utf8(line, 1024);
+    let Some(payload_pos) = prefix.find("\"payload\":{") else {
+        return false;
+    };
+    let head = &prefix[..payload_pos];
+    let Some(raw_ts) = extract_json_str(head, "\"timestamp\":\"") else {
+        return false;
+    };
+    let Some(stamp) = parse_rfc3339_utc(raw_ts) else {
+        return false;
+    };
+    let Some(kind) = extract_json_str(head, "\"type\":\"") else {
+        return false;
+    };
+    let payload_prefix = &prefix[payload_pos..];
+
+    match kind {
+        "compacted" => {
+            builder.touch_time(Some(stamp));
+            true
+        }
+        "event_msg" => match extract_json_str(payload_prefix, "\"type\":\"") {
+            Some("item_completed") => {
+                builder.touch_time(Some(stamp.clone()));
+                timing.activity_iso(&stamp);
+                true
+            }
+            _ => false,
+        },
+        "response_item" => match extract_json_str(payload_prefix, "\"type\":\"") {
+            Some(
+                "function_call"
+                | "custom_tool_call"
+                | "function_call_output"
+                | "custom_tool_call_output",
+            ) => {
+                builder.touch_time(Some(stamp.clone()));
+                timing.activity_iso(&stamp);
+                builder.message_count = builder.message_count.saturating_add(1);
+                true
+            }
+            Some("reasoning") => {
+                builder.touch_time(Some(stamp.clone()));
+                timing.activity_iso(&stamp);
+                true
+            }
+            Some("compaction" | "additional_tools") => {
+                builder.touch_time(Some(stamp));
+                true
+            }
+            Some("message") if builder.user_text.is_some() && builder.assistant_text.is_some() => {
+                match extract_json_str(payload_prefix, "\"role\":\"") {
+                    Some("developer" | "system") => {
+                        builder.touch_time(Some(stamp));
+                        true
+                    }
+                    Some("assistant") => {
+                        builder.touch_time(Some(stamp.clone()));
+                        timing.activity_iso(&stamp);
+                        builder.message_count = builder.message_count.saturating_add(1);
+                        true
+                    }
+                    Some("user") => {
+                        let has_image = payload_prefix.contains("\"input_image\"")
+                            || payload_prefix.contains("\"type\":\"image\"");
+                        let genuine_text = payload_prefix.find("\"text\":\"").is_some_and(|pos| {
+                            let rest = &payload_prefix[pos + 8..];
+                            let trimmed = rest.trim_start();
+                            !trimmed.is_empty()
+                                && !trimmed.starts_with('"')
+                                && !trimmed.starts_with('\\')
+                                && !is_injected_context(trimmed)
+                        });
+                        if has_image || genuine_text {
+                            builder.touch_time(Some(stamp.clone()));
+                            timing.activity_iso(&stamp);
+                            builder.message_count = builder.message_count.saturating_add(1);
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String> {
-    let file = File::open(path).map_err(|error| format!("Could not open session: {error}"))?;
-    let reader = BufReader::new(file);
+    let mut reader = open_rollout_reader(path)?;
     let mut builder = Builder::new();
     let mut timing = crate::timing::Collector::default();
     let fallback_id = path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| {
+            name.strip_suffix(".jsonl.zst")
+                .or_else(|| name.strip_suffix(".jsonl"))
+                .unwrap_or(name)
+        })
         .unwrap_or("session")
         .to_string();
     let mut line_index = 0usize;
+    let mut raw_line = Vec::with_capacity(4096);
 
-    for line in reader.lines() {
-        let Ok(line) = line else { continue };
-        let line = line.trim();
+    loop {
+        raw_line.clear();
+        let read = match reader.read_until(b'\n', &mut raw_line) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(_) => break,
+        };
+        if read == 0 {
+            break;
+        }
+        let decoded = String::from_utf8_lossy(&raw_line);
+        let line = decoded.trim();
         if line.is_empty() {
+            if raw_line.capacity() > MAX_RETAINED_LINE_BYTES {
+                raw_line = Vec::with_capacity(4096);
+            }
             continue;
         }
         line_index += 1;
+
+        if !with_messages
+            && line.len() > LARGE_LINE_THRESHOLD
+            && try_fast_skip_large_line(line, &mut builder, &mut timing)
+        {
+            if raw_line.capacity() > MAX_RETAINED_LINE_BYTES {
+                raw_line = Vec::with_capacity(4096);
+            }
+            continue;
+        }
+
         let Ok(value) = serde_json::from_str::<Value>(line) else {
+            if raw_line.capacity() > MAX_RETAINED_LINE_BYTES {
+                raw_line = Vec::with_capacity(4096);
+            }
             continue;
         };
 
@@ -292,18 +537,41 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
                         .map(str::to_string);
                 }
             }
-            "event_msg" => {
-                if payload.get("type").and_then(Value::as_str) == Some("token_count") {
+            "world_state" => {
+                if let Some(model) = payload
+                    .get("state")
+                    .and_then(|state| state.get("collaboration_mode"))
+                    .and_then(|mode| mode.get("model"))
+                    .and_then(Value::as_str)
+                {
+                    builder.note_model(model);
+                }
+            }
+            "event_msg" => match payload.get("type").and_then(Value::as_str) {
+                Some("thread_settings_applied") => {
+                    if let Some(model) = payload
+                        .get("thread_settings")
+                        .and_then(|settings| settings.get("model"))
+                        .and_then(Value::as_str)
+                    {
+                        builder.note_model(model);
+                    }
+                }
+                Some("token_count") => {
                     if let Some(total) = payload
                         .get("info")
                         .and_then(|info| info.get("total_token_usage"))
                     {
-                        let input = total
+                        let raw_input = total
                             .get("input_tokens")
                             .and_then(Value::as_u64)
                             .unwrap_or(0);
                         let cached = total
                             .get("cached_input_tokens")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        let cache_write = total
+                            .get("cache_write_input_tokens")
                             .and_then(Value::as_u64)
                             .unwrap_or(0);
                         let output = total
@@ -312,17 +580,35 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
                             .unwrap_or(0);
                         // OpenAI reports cached input as a subset of input tokens.
                         let next = TokenTotals {
-                            input: input.saturating_sub(cached),
+                            input: raw_input.saturating_sub(cached),
                             output,
                             cache_read: cached,
-                            cache_write: 0,
+                            cache_write,
                         };
-                        // Totals are cumulative, so the day's share is the delta.
-                        let delta = TokenTotals {
-                            input: next.input.saturating_sub(builder.totals.input),
-                            output: next.output.saturating_sub(builder.totals.output),
-                            cache_read: next.cache_read.saturating_sub(builder.totals.cache_read),
-                            cache_write: 0,
+                        // Totals are cumulative within a run, but Codex resets
+                        // total_token_usage to 0 when a session is resumed.
+                        let reset = raw_input < builder.prev_raw_input
+                            || output < builder.prev_cumulative.output
+                            || cached < builder.prev_cumulative.cache_read
+                            || cache_write < builder.prev_cumulative.cache_write;
+                        let delta = if reset {
+                            TokenTotals {
+                                input: next.input,
+                                output: next.output,
+                                cache_read: next.cache_read,
+                                cache_write: next.cache_write,
+                            }
+                        } else {
+                            TokenTotals {
+                                input: next.input.saturating_sub(builder.prev_cumulative.input),
+                                output: next.output.saturating_sub(builder.prev_cumulative.output),
+                                cache_read: next
+                                    .cache_read
+                                    .saturating_sub(builder.prev_cumulative.cache_read),
+                                cache_write: next
+                                    .cache_write
+                                    .saturating_sub(builder.prev_cumulative.cache_write),
+                            }
                         };
                         let cost = builder.model.as_deref().and_then(|model| {
                             pricing::estimate(
@@ -335,16 +621,25 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
                         });
                         builder.usage_days.add(
                             &message_stamp,
+                            builder.model.as_deref(),
                             delta.input,
                             delta.output,
                             delta.cache_read,
                             delta.cache_write,
                             cost,
                         );
-                        builder.totals = next;
+                        builder.totals.input = builder.totals.input.saturating_add(delta.input);
+                        builder.totals.output = builder.totals.output.saturating_add(delta.output);
+                        builder.totals.cache_read =
+                            builder.totals.cache_read.saturating_add(delta.cache_read);
+                        builder.totals.cache_write =
+                            builder.totals.cache_write.saturating_add(delta.cache_write);
+                        builder.prev_cumulative = next;
+                        builder.prev_raw_input = raw_input;
                     }
                 }
-            }
+                _ => {}
+            },
             "response_item" => {
                 parse_response_item(
                     &mut builder,
@@ -355,6 +650,10 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
                 );
             }
             _ => {}
+        }
+
+        if raw_line.capacity() > MAX_RETAINED_LINE_BYTES {
+            raw_line = Vec::with_capacity(4096);
         }
     }
 
@@ -385,16 +684,22 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
         .map(|text| excerpt(text, 168))
         .filter(|text| !text.is_empty())
         .unwrap_or_else(|| "A local Codex conversation.".to_string());
+    let usage_cost = builder.usage_days.total_cost();
+    let usage_days = builder.usage_days.into_vec();
     let usage = if !builder.totals.is_zero() {
-        let cost = builder.model.as_deref().and_then(|model| {
-            pricing::estimate(
-                model,
-                builder.totals.input,
-                builder.totals.output,
-                builder.totals.cache_read,
-                builder.totals.cache_write,
-            )
-        });
+        let cost = if !usage_days.is_empty() {
+            usage_cost
+        } else {
+            builder.model.as_deref().and_then(|model| {
+                pricing::estimate(
+                    model,
+                    builder.totals.input,
+                    builder.totals.output,
+                    builder.totals.cache_read,
+                    builder.totals.cache_write,
+                )
+            })
+        };
         Some(UsageBreakdown {
             input: builder.totals.input,
             output: builder.totals.output,
@@ -434,7 +739,8 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
             model: primary_model,
             models,
             usage,
-            usage_days: builder.usage_days.into_vec(),
+            usage_days,
+            model_usage: Vec::new(),
             format: "jsonl".to_string(),
             path: path.to_string_lossy().to_string(),
             deletable: true,

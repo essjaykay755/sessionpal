@@ -349,6 +349,7 @@ fn parse_file(path: &Path, with_messages: bool) -> Result<ParsedSession, String>
             models: model_list,
             usage,
             usage_days: builder.usage_days.into_vec(),
+            model_usage: Vec::new(),
             format: "jsonl".to_string(),
             path: path.to_string_lossy().to_string(),
             deletable: true,
@@ -507,9 +508,15 @@ fn parse_assistant_entry(
             } else {
                 builder.unknown_cost = true;
             }
-            builder
-                .usage_days
-                .add(stamp, input, output, cache_read, cache_write, cost);
+            builder.usage_days.add(
+                stamp,
+                (!model.is_empty()).then_some(model.as_str()),
+                input,
+                output,
+                cache_read,
+                cache_write,
+                cost,
+            );
         }
     }
 

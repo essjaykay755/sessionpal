@@ -28,6 +28,7 @@ import {
 } from "../lib/utils";
 import { AgentMark } from "../components/Brand";
 import { AreaChart } from "../components/charts";
+import { ModelHistoryView } from "../components/ModelHistoryView";
 import { ProjectCostTable } from "../components/ProjectCostTable";
 import { ProjectDetail } from "../components/ProjectDetail";
 import { PageHeader, PageScroll, SectionNav, SectionTitle } from "../components/PageChrome";
@@ -40,7 +41,8 @@ const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = (
 export default function UsagePage() {
   const { sessions, settings, openDialog, updateSettings, focusAgent, effectiveTheme } =
     useApp();
-  const [section, setSection] = useState<"overview" | "projects" | "models">("overview");
+  const [section, setSection] = useState<"overview" | "projects" | "models" | "history">("overview");
+  const [historyModelId, setHistoryModelId] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("30d");
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
 
@@ -110,12 +112,14 @@ export default function UsagePage() {
             >
               How estimates work
             </Button>
-            <Segmented
-              value={range}
-              options={RANGE_OPTIONS}
-              onChange={setRange}
-              className="bg-line/[0.055]"
-            />
+            {section !== "history" && (
+              <Segmented
+                value={range}
+                options={RANGE_OPTIONS}
+                onChange={setRange}
+                className="bg-line/[0.055]"
+              />
+            )}
           </>
         }
       />
@@ -129,12 +133,15 @@ export default function UsagePage() {
           { value: "overview", label: "Overview" },
           { value: "projects", label: "Projects" },
           { value: "models", label: "Models & agents" },
+          { value: "history", label: "Model history" },
         ]}
       />
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 rounded-xl border border-line/[0.07] bg-panel px-4 py-3 text-12 leading-relaxed text-muted">
-        <span><strong className="font-semibold text-fg">{RANGE_LABELS[range]}</strong> · {new Date(`${span.from}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} – {new Date(`${span.to}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
-        <span>API-equivalent estimates, not a bill{settings.showCosts && hasUnpricedUsage ? ` · ${number(totals.pricedSessions)} of ${number(totals.sessionsWithUsage)} sessions with usage priced` : ""}</span>
-      </div>
+      {section !== "history" && (
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 rounded-xl border border-line/[0.07] bg-panel px-4 py-3 text-12 leading-relaxed text-muted">
+          <span><strong className="font-semibold text-fg">{RANGE_LABELS[range]}</strong> · {new Date(`${span.from}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} – {new Date(`${span.to}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+          <span>API-equivalent estimates, not a bill{settings.showCosts && hasUnpricedUsage ? ` · ${number(totals.pricedSessions)} of ${number(totals.sessionsWithUsage)} sessions with usage priced` : ""}</span>
+        </div>
+      )}
       {section === "overview" && (
         <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -413,9 +420,23 @@ export default function UsagePage() {
                 {models.length} models across {number(totals.sessions)} sessions
               </p>
             </div>
-            <span className="pb-0.5 text-11 text-faint">
-              {settings.showCosts ? "Estimated at public list prices" : "Cost estimates hidden"}
-            </span>
+            <div className="flex items-center gap-3 pb-0.5">
+              <span className="text-11 text-faint">
+                {settings.showCosts ? "Estimated at public list prices" : "Cost estimates hidden"}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-11"
+                onClick={() => {
+                  setHistoryModelId(null);
+                  setSection("history");
+                }}
+              >
+                History calendar
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
           <div className="mt-4 grid grid-cols-[minmax(0,1fr)_52px_68px_72px] gap-2 border-b border-line/[0.06] px-5 pb-2 text-11 font-medium text-faint sm:grid-cols-[minmax(0,1fr)_56px_60px_84px_68px] sm:px-6">
             <span>Model</span>
@@ -427,13 +448,18 @@ export default function UsagePage() {
             </span>
           </div>
           <div className="px-2 pb-2 pt-1 sm:px-2.5">
-            {models.map((model, index) => (
-              <motion.div
+            {models.map((model) => (
+              <motion.button
                 key={model.id}
+                type="button"
                 initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.12 }}
-                className="grid grid-cols-[minmax(0,1fr)_52px_68px_72px] items-center gap-2 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-sunken/40 sm:grid-cols-[minmax(0,1fr)_56px_60px_84px_68px]"
+                onClick={() => {
+                  setHistoryModelId(model.id);
+                  setSection("history");
+                }}
+                className="grid w-full grid-cols-[minmax(0,1fr)_52px_68px_72px] items-center gap-2 rounded-[10px] px-3 py-2.5 text-left transition-colors hover:bg-sunken/40 sm:grid-cols-[minmax(0,1fr)_56px_60px_84px_68px]"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span
@@ -468,7 +494,7 @@ export default function UsagePage() {
                 <div className="hidden text-right text-11 tabular text-muted sm:block">
                   {settings.showCosts && model.costKnown ? money(model.cost) : "—"}
                 </div>
-              </motion.div>
+              </motion.button>
             ))}
             {models.length === 0 && (
               <div className="px-4 py-8 text-center text-12 text-muted">
@@ -515,6 +541,12 @@ export default function UsagePage() {
           </div>
         </div>
         </section>
+      )}
+      {section === "history" && (
+        <ModelHistoryView
+          initialModelId={historyModelId}
+          onConsumeInitialModel={() => setHistoryModelId(null)}
+        />
       )}
 
       <ProjectDetail

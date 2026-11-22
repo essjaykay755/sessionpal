@@ -5,6 +5,7 @@ import {
   Archive,
   ArrowsClockwise,
   ArrowRight,
+  CalendarBlank,
   ChartLineUp,
   ChatCircleDots,
   HardDrives,
@@ -85,6 +86,21 @@ export function CommandPalette() {
         keywords: `go to ${command.label} ${command.page}`,
         run: () => navigate(command.page),
       })),
+      {
+        id: "model-history",
+        group: "Navigate",
+        label: "Model history",
+        detail: "Historical calendar and per-model breakdown",
+        icon: <CalendarBlank className="h-4 w-4" />,
+        keywords: "model history calendar heatmap streak daily monthly models used",
+        run: () => {
+          navigate("usage");
+          window.setTimeout(
+            () => document.getElementById("usage-section-history")?.click(),
+            80,
+          );
+        },
+      },
       {
         id: "create-backup",
         group: "Actions",

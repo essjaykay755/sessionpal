@@ -75,17 +75,85 @@ function readableModelName(id: string): string {
   return words.join(" ");
 }
 
+const GENERIC_MODEL_COLOR = "#8d8477";
+
+const FALLBACK_PALETTE = [
+  "#5a7ee6", // cobalt
+  "#d46a49", // terracotta
+  "#3d9b7b", // emerald
+  "#8a6fd6", // iris
+  "#cc9235", // amber
+  "#389dc4", // cerulean
+  "#cf6382", // rose
+  "#84a04a", // moss
+  "#549ce0", // sky
+  "#c26242", // rust
+];
+
+function hashModelId(id: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/** Pick a vivid, family-aligned color when a model has no explicit catalog swatch. */
+export function resolveModelColor(id: string | null | undefined, family: string, color?: string): string {
+  if (color && color.toLowerCase() !== GENERIC_MODEL_COLOR) return color;
+  const key = (id ?? "").toLowerCase();
+  const fam = family.toLowerCase();
+  if (key.includes("claude") || fam.includes("anthropic")) {
+    if (key.includes("opus")) return "#c96642";
+    if (key.includes("sonnet")) return "#db8259";
+    if (key.includes("haiku")) return "#dfa983";
+    return "#cc7250";
+  }
+  if (key.includes("gemini") || key.includes("gemma") || fam.includes("google")) {
+    if (key.includes("flash") || key.includes("lite")) return "#4fa3de";
+    if (key.includes("neon")) return "#5a82e6";
+    return "#5d7ce2";
+  }
+  if (
+    key.includes("gpt") ||
+    key.includes("codex") ||
+    /^o[134](?:\b|-)/.test(key) ||
+    fam.includes("openai")
+  ) {
+    if (key.includes("mini") || key.includes("nano") || key.includes("luna")) return "#6fb59d";
+    if (key.includes("terra") || key.includes("codex")) return "#48997e";
+    return "#3d8772";
+  }
+  if (key.includes("deepseek") || fam.includes("deepseek")) return "#3c97c2";
+  if (key.includes("composer") || fam.includes("cursor")) return "#856dd1";
+  if (key.includes("kimi") || fam.includes("moonshot")) return "#c7933a";
+  if (key.includes("qwen") || fam.includes("alibaba")) return "#8c9f52";
+  if (key.includes("grok") || fam.includes("xai")) return "#c4627f";
+  if (key.includes("llama") || fam.includes("meta")) return "#6682cc";
+  if (key.includes("mistral") || key.includes("codestral") || fam.includes("mistral")) return "#d48446";
+  if (key.includes("glm") || fam.includes("zhipu")) return "#5b9ab0";
+  if (!key) return GENERIC_MODEL_COLOR;
+  return FALLBACK_PALETTE[hashModelId(key) % FALLBACK_PALETTE.length];
+}
+
 export function modelInfo(id: string | null | undefined): ModelInfo {
   const known = knownModelInfo(id);
   const metadata = id ? liveMetadata[id] ?? liveMetadata[id.replace(/-\d{8}$/, "")] : undefined;
   if (known) {
-    return metadata ? { ...known, family: metadata.family } : known;
+    const family = metadata?.family ?? known.family;
+    return {
+      ...known,
+      family,
+      color: resolveModelColor(id, family, known.color),
+    };
   }
+  const family = metadata?.family ?? "Unknown";
   return {
     id: id ?? "unknown",
     label: metadata?.label ?? (id ? readableModelName(id) : "Unknown model"),
-    family: metadata?.family ?? "Unknown",
-    color: "#8d8477",
+    family,
+    color: resolveModelColor(id, family),
     input: 0,
     output: 0,
     cacheRead: 0,

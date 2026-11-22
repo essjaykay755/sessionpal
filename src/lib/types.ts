@@ -39,6 +39,16 @@ export interface UsageBreakdown {
   cost: number | null;
 }
 
+/** Token usage attributed to a single model. */
+export interface ModelUsage {
+  model: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost: number | null;
+}
+
 /** Usage that happened on one local calendar day (`YYYY-MM-DD`). */
 export interface DayUsage {
   day: string;
@@ -48,6 +58,8 @@ export interface DayUsage {
   cacheWrite: number;
   /** Null when part of the day's usage came from an unpriced model. */
   cost: number | null;
+  /** Per-model breakdown for this day when available. */
+  models?: ModelUsage[];
 }
 
 export interface Message {
@@ -93,6 +105,11 @@ export interface SessionSummary {
    * only stores session-level totals; analytics then fall back to `updatedAt`.
    */
   usageDays?: DayUsage[];
+  /**
+   * Per-model usage breakdown for undated sessions (such as Antigravity) where
+   * multiple models appear inside one conversation.
+   */
+  modelUsage?: ModelUsage[];
   format: "jsonl" | "json" | "sqlite";
   path: string;
   /** False for sessions SessionPal can see but not safely remove (e.g. inside Cursor's DB). */

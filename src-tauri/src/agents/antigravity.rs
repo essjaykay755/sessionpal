@@ -13,7 +13,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::types::Value as SqlValue;
 use rusqlite::Connection;
 
-use crate::models::{AgentId, Message, SessionDetail, SessionSummary, UsageBreakdown};
+use crate::models::{AgentId, Message, ModelUsage, SessionDetail, SessionSummary, UsageBreakdown};
 use crate::pricing;
 use crate::timing::Collector;
 use crate::util::{display_path, excerpt, file_size, is_injected_context, iso_from_system_time, iso_now, project_info, truncate_chars};
@@ -261,6 +261,31 @@ impl Generations {
         }
         total.cost = total.cost.map(|cost| (cost * 10_000.0).round() / 10_000.0);
         (!total.is_empty()).then_some(total)
+    }
+
+    fn model_usage(&self) -> Vec<ModelUsage> {
+        let mut list: Vec<ModelUsage> = self
+            .usage_by_model
+            .iter()
+            .filter_map(|(model, usage)| {
+                let id = model.as_deref()?;
+                if usage.is_empty() {
+                    return None;
+                }
+                let cost = pricing::estimate(id, usage.input, usage.output, usage.cache_read, 0)
+                    .map(|amount| (amount * 10_000.0).round() / 10_000.0);
+                Some(ModelUsage {
+                    model: id.to_string(),
+                    input: usage.input,
+                    output: usage.output,
+                    cache_read: usage.cache_read,
+                    cache_write: usage.cache_write,
+                    cost,
+                })
+            })
+            .collect();
+        list.sort_by(|a, b| b.tokens().cmp(&a.tokens()).then_with(|| a.model.cmp(&b.model)));
+        list
     }
 }
 
@@ -603,6 +628,7 @@ fn summarize(loaded: &Loaded, index: &Path, row: &Row, transcript_data: &Transcr
     }
     let model = generations.models.first().cloned();
     let usage = generations.usage();
+    let model_usage = generations.model_usage();
     let segments = &transcript_data.segments;
 
     let user_text = segments.iter().find(|segment| segment.role == "user").map(|s| s.text.as_str());
@@ -662,6 +688,7 @@ fn summarize(loaded: &Loaded, index: &Path, row: &Row, transcript_data: &Transcr
         usage,
         // Only session-level totals are available here.
         usage_days: Vec::new(),
+        model_usage,
         format: "sqlite".to_string(),
         path: index.to_string_lossy().to_string(),
         // Never write to another app's live data.

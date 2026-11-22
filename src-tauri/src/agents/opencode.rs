@@ -433,7 +433,15 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
                     builder.known_cost = true;
                 }
                 if let Some(stamp) = &meta.created {
-                    usage_days.add(stamp, meta.input, meta.output, meta.cache_read, meta.cache_write, cost);
+                    usage_days.add(
+                        stamp,
+                        Some(canonical.as_str()),
+                        meta.input,
+                        meta.output,
+                        meta.cache_read,
+                        meta.cache_write,
+                        cost,
+                    );
                 }
             }
         } else if meta.role == "assistant" {
@@ -442,7 +450,15 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
             builder.usage.cache_read = builder.usage.cache_read.saturating_add(meta.cache_read);
             builder.usage.cache_write = builder.usage.cache_write.saturating_add(meta.cache_write);
             if let Some(stamp) = &meta.created {
-                usage_days.add(stamp, meta.input, meta.output, meta.cache_read, meta.cache_write, None);
+                usage_days.add(
+                    stamp,
+                    None,
+                    meta.input,
+                    meta.output,
+                    meta.cache_read,
+                    meta.cache_write,
+                    None,
+                );
             }
         }
     }
@@ -515,6 +531,7 @@ fn parse_session(root: &Path, path: &Path, with_messages: bool) -> Result<Parsed
             models,
             usage,
             usage_days: usage_days.into_vec(),
+            model_usage: Vec::new(),
             format: "json".to_string(),
             path: path.to_string_lossy().to_string(),
             deletable: true,

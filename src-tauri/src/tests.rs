@@ -932,6 +932,11 @@ fn reads_antigravity_conversations() {
     let usage = session.usage.as_ref().unwrap();
     assert_eq!((usage.input, usage.output, usage.cache_read), (1550, 400, 10_000));
     assert_eq!(usage.cost, Some(0.0144));
+    assert_eq!(session.model_usage.len(), 2);
+    assert_eq!(session.model_usage[0].model, "claude-opus-5-5");
+    assert_eq!(session.model_usage[0].input, 1000);
+    assert_eq!(session.model_usage[1].model, "gemini-4-neon");
+    assert_eq!(session.model_usage[1].input, 550);
     let timing = session.timing.as_ref().unwrap();
     assert_eq!(timing.event_count, 4, "ignore empty indexed text and unindexed steps");
     assert_eq!(timing.elapsed_ms, Some(1_500_000));
@@ -1071,6 +1076,7 @@ fn project_session(cwd: &str, project: &str, label: &str) -> crate::models::Sess
         models: Vec::new(),
         usage: None,
         usage_days: Vec::new(),
+        model_usage: Vec::new(),
         format: "jsonl".to_string(),
         path: String::new(),
         deletable: true,
@@ -1476,4 +1482,172 @@ fn claude_undated_and_injected_messages_do_not_use_file_times() {
         r#"{"type":"user","uuid":"ctx","timestamp":"2026-11-05T09:00:00Z","message":{"content":"<environment_context>injected</environment_context>"}}"#,
     ));
     assert!(claude::detail(&file).unwrap().summary.timing.is_none());
+}
+
+#[test]
+fn usage_days_record_per_model_breakdowns() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("projects").join("multi");
+    let file = root.join("session-multi.jsonl");
+    write(
+        &file,
+        concat!(
+            r#"{"type":"user","uuid":"u1","sessionId":"s-multi","timestamp":"2026-11-05T10:00:00.000Z","cwd":"/tmp/demo","message":{"role":"user","content":"Start"}}"#,
+            "\n",
+            r#"{"type":"assistant","uuid":"a1","sessionId":"s-multi","timestamp":"2026-11-05T10:01:00.000Z","message":{"role":"assistant","model":"claude-sonnet-5-5","content":"Working","usage":{"input_tokens":200,"output_tokens":100,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}"#,
+            "\n",
+            r#"{"type":"assistant","uuid":"a2","sessionId":"s-multi","timestamp":"2026-11-05T10:05:00.000Z","message":{"role":"assistant","model":"claude-opus-5-5","content":"Deep dive","usage":{"input_tokens":500,"output_tokens":400,"cache_read_input_tokens":1000,"cache_creation_input_tokens":0}}}"#,
+            "\n",
+        ),
+    );
+    let sessions = claude::scan(&[root]);
+    let day = &sessions[0].usage_days[0];
+    assert_eq!(day.models.len(), 2);
+    assert_eq!(day.models[0].model, "claude-opus-5-5");
+    assert_eq!(day.models[0].tokens(), 1900);
+    assert_eq!(day.models[1].model, "claude-sonnet-5-5");
+    assert_eq!(day.models[1].tokens(), 300);
+
+    let codex_file = temp.path().join("sessions/2026/11/rollout-switch.jsonl");
+    write(
+        &codex_file,
+        concat!(
+            r#"{"timestamp":"2026-11-02T12:00:00.000Z","type":"session_meta","payload":{"id":"codex-switch","cwd":"/tmp/demo"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-02T12:00:01.000Z","type":"turn_context","payload":{"model":"gpt-6.1-terra"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-02T12:00:10.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100}}}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-03T12:00:01.000Z","type":"turn_context","payload":{"model":"gpt-6.1-sol"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-03T12:00:10.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1800,"cached_input_tokens":400,"output_tokens":300}}}}"#,
+            "\n",
+        ),
+    );
+    let codex_sessions = codex::scan(&[temp.path().join("sessions")]);
+    assert_eq!(codex_sessions[0].usage_days.len(), 2);
+    assert_eq!(codex_sessions[0].usage_days[0].models[0].model, "gpt-6.1-terra");
+    assert_eq!(codex_sessions[0].usage_days[0].models[0].tokens(), 1100);
+    assert_eq!(codex_sessions[0].usage_days[1].models[0].model, "gpt-6.1-sol");
+    assert_eq!(codex_sessions[0].usage_days[1].models[0].tokens(), 1000);
+}
+
+#[test]
+fn parses_zstd_compressed_codex_rollouts_and_archived_sessions() {
+    let temp = TempDir::new().unwrap();
+    let sessions_root = temp.path().join("sessions");
+    let archived_root = temp.path().join("archived_sessions");
+    let oct_file = sessions_root
+        .join("2026")
+        .join("10")
+        .join("05")
+        .join("rollout-2026-10-05-zst.jsonl.zst");
+    let arch_file = archived_root.join("rollout-2026-08-24-archived.jsonl.zst");
+
+    let oct_body = concat!(
+        r#"{"timestamp":"2026-10-05T10:00:00.000Z","type":"session_meta","payload":{"id":"codex-zst-oct","cwd":"/tmp/oct-app"}}"#,
+        "\n",
+        r#"{"timestamp":"2026-10-05T10:00:01.000Z","type":"event_msg","payload":{"type":"thread_settings_applied","thread_settings":{"model":"gpt-5.1-codex"}}}"#,
+        "\n",
+        r#"{"timestamp":"2026-10-05T10:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Fix October deployment"}]}}"#,
+        "\n",
+        r#"{"timestamp":"2026-10-05T10:00:05.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Checking logs now."}]}}"#,
+        "\n",
+        r#"{"timestamp":"2026-10-05T10:00:09.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":2000,"cached_input_tokens":500,"output_tokens":200}}}}"#,
+        "\n",
+    );
+    let arch_body = concat!(
+        r#"{"timestamp":"2026-08-24T09:00:00.000Z","type":"session_meta","payload":{"id":"codex-zst-arch","cwd":"/tmp/aug-app"}}"#,
+        "\n",
+        r#"{"timestamp":"2026-08-24T09:00:01.000Z","type":"world_state","payload":{"full":true,"state":{"collaboration_mode":{"model":"gpt-5.4"}}}}"#,
+        "\n",
+        r#"{"timestamp":"2026-08-24T09:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Archive check"}]}}"#,
+        "\n",
+        r#"{"timestamp":"2026-08-24T09:00:09.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":50}}}}"#,
+        "\n",
+    );
+
+    fs::create_dir_all(oct_file.parent().unwrap()).unwrap();
+    fs::create_dir_all(arch_file.parent().unwrap()).unwrap();
+    fs::write(&oct_file, zstd::stream::encode_all(oct_body.as_bytes(), 3).unwrap()).unwrap();
+    fs::write(&arch_file, zstd::stream::encode_all(arch_body.as_bytes(), 3).unwrap()).unwrap();
+
+    let roots = vec![sessions_root.clone(), archived_root.clone()];
+    assert_eq!(codex::count_sessions(&roots), 2);
+    let mut sessions = codex::scan(&roots);
+    sessions.sort_by(|a, b| a.id.cmp(&b.id));
+    assert_eq!(sessions.len(), 2);
+
+    assert_eq!(sessions[0].id, "codex-zst-arch");
+    assert_eq!(sessions[0].model.as_deref(), Some("gpt-5.4"));
+    assert_eq!(sessions[0].tokens, 1050);
+    assert_eq!(sessions[0].usage_days[0].models[0].model, "gpt-5.4");
+
+    assert_eq!(sessions[1].id, "codex-zst-oct");
+    assert_eq!(sessions[1].model.as_deref(), Some("gpt-5.1-codex"));
+    assert_eq!(sessions[1].tokens, 2200);
+    assert_eq!(sessions[1].usage_days[0].models[0].model, "gpt-5.1-codex");
+
+    let detail = codex::detail(&oct_file).unwrap();
+    assert_eq!(detail.messages.len(), 2);
+    assert_eq!(detail.summary.title, "Fix October deployment");
+
+    let mut agent_roots = paths::AgentRoots::default();
+    agent_roots.codex = roots;
+    assert!(paths::validate_restore_target(
+        AgentId::Codex,
+        "session",
+        &oct_file,
+        &agent_roots,
+    )
+    .is_ok());
+}
+
+#[test]
+fn codex_handles_counter_resets_early_tokens_and_large_lines() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("sessions/2026/08/25/rollout-reset.jsonl");
+    let big_output = "x".repeat(90_000);
+    let big_user_body = "y".repeat(90_000);
+    let content = format!(
+        concat!(
+            r#"{{"timestamp":"2026-08-25T10:00:00.000Z","type":"session_meta","payload":{{"id":"codex-reset","cwd":"/tmp/demo"}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T10:00:01.000Z","type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":5000,"cached_input_tokens":1000,"output_tokens":200}}}}}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T10:00:02.000Z","type":"turn_context","payload":{{"model":"gpt-5.1-codex"}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T10:00:03.000Z","type":"response_item","payload":{{"type":"message","role":"user","content":[{{"type":"input_text","text":"First turn"}}]}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T10:00:04.000Z","type":"response_item","payload":{{"type":"message","role":"assistant","content":[{{"type":"output_text","text":"Working"}}]}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T10:00:05.000Z","type":"response_item","payload":{{"type":"function_call_output","call_id":"c1","output":"{}"}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T10:00:06.000Z","type":"response_item","payload":{{"type":"message","role":"user","content":[{{"type":"input_text","text":"{}"}}]}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T10:00:10.000Z","type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":8000,"cached_input_tokens":2000,"output_tokens":500}}}}}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T12:00:10.000Z","type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1200,"cached_input_tokens":200,"output_tokens":100}}}}}}}}"#, "\n",
+            r#"{{"timestamp":"2026-08-25T12:05:10.000Z","type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":2200,"cached_input_tokens":400,"output_tokens":250}}}}}}}}"#, "\n",
+        ),
+        big_output,
+        big_user_body,
+    );
+    write(&file, &content);
+
+    let scanned = codex::scan(&[temp.path().join("sessions")]);
+    assert_eq!(scanned.len(), 1);
+    let summary = &scanned[0];
+    let detail = codex::detail(&file).unwrap();
+
+    // Run 1 reached 8000 in + 500 out = 8500; resumed run 2 reached 2200 in + 250 out = 2450.
+    // Total must be 10,950 (not 2,450!).
+    assert_eq!(summary.tokens, 10_950);
+    assert_eq!(detail.summary.tokens, 10_950);
+    // Early token_count before turn_context must be backfilled to gpt-5.1-codex.
+    assert_eq!(summary.usage_days.len(), 1);
+    assert_eq!(summary.usage_days[0].models.len(), 1);
+    assert_eq!(summary.usage_days[0].models[0].model, "gpt-5.1-codex");
+    assert_eq!(summary.usage_days[0].models[0].tokens(), 10_950);
+    assert!(summary.usage.as_ref().unwrap().cost.is_some());
+    assert!(summary.usage_days[0].cost.is_some());
+    // Fast-path summary and full detail must agree on message count and timing.
+    assert_eq!(summary.message_count, detail.summary.message_count);
+    assert_eq!(summary.message_count, 4);
+    assert_eq!(
+        summary.timing.as_ref().map(|t| t.event_count),
+        detail.summary.timing.as_ref().map(|t| t.event_count),
+    );
 }

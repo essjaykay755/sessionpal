@@ -317,6 +317,7 @@ fn parse_composer(
             }
             usage_days.add(
                 &bubble.timestamp,
+                bubble.model.as_deref(),
                 bubble.input,
                 bubble.output,
                 bubble.cache_read,
@@ -409,6 +410,7 @@ fn parse_composer(
             models,
             usage,
             usage_days: usage_days.into_vec(),
+            model_usage: Vec::new(),
             format: "sqlite".to_string(),
             path: db.to_string_lossy().to_string(),
             deletable: false,

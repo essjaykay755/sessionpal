@@ -328,11 +328,40 @@ pub fn local_day(stamp: &str) -> Option<String> {
         .map(|time| time.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string())
 }
 
-/// Accumulates usage per local day so charts can place tokens on the day they
-/// were spent rather than on a session's last-updated date.
+#[derive(Default)]
+struct DayBucket {
+    day: String,
+    input: u64,
+    output: u64,
+    cache_read: u64,
+    cache_write: u64,
+    models: std::collections::BTreeMap<String, crate::models::ModelUsage>,
+    unassigned: crate::models::ModelUsage,
+}
+
+fn merge_model_usage(
+    target: &mut crate::models::ModelUsage,
+    input: u64,
+    output: u64,
+    cache_read: u64,
+    cache_write: u64,
+    cost: Option<f64>,
+) {
+    target.input = target.input.saturating_add(input);
+    target.output = target.output.saturating_add(output);
+    target.cache_read = target.cache_read.saturating_add(cache_read);
+    target.cache_write = target.cache_write.saturating_add(cache_write);
+    target.cost = match (target.cost, cost) {
+        (Some(total), Some(cost)) => Some(total + cost),
+        _ => None,
+    };
+}
+
+/// Accumulates usage per local day (and per model within each day) so charts
+/// and model history calendars can place tokens on the exact day they were spent.
 #[derive(Default)]
 pub struct UsageDays {
-    days: std::collections::BTreeMap<String, crate::models::DayUsage>,
+    days: std::collections::BTreeMap<String, DayBucket>,
 }
 
 impl UsageDays {
@@ -341,6 +370,7 @@ impl UsageDays {
     pub fn add(
         &mut self,
         stamp: &str,
+        model: Option<&str>,
         input: u64,
         output: u64,
         cache_read: u64,
@@ -356,27 +386,137 @@ impl UsageDays {
         let entry = self
             .days
             .entry(day.clone())
-            .or_insert_with(|| crate::models::DayUsage {
+            .or_insert_with(|| DayBucket {
                 day,
-                cost: Some(0.0),
+                unassigned: crate::models::ModelUsage {
+                    cost: Some(0.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             });
         entry.input = entry.input.saturating_add(input);
         entry.output = entry.output.saturating_add(output);
         entry.cache_read = entry.cache_read.saturating_add(cache_read);
         entry.cache_write = entry.cache_write.saturating_add(cache_write);
-        entry.cost = match (entry.cost, cost) {
-            (Some(total), Some(cost)) => Some(total + cost),
-            _ => None,
-        };
+        if let Some(model_id) = model.map(str::trim).filter(|m| !m.is_empty()) {
+            let bucket = entry
+                .models
+                .entry(model_id.to_string())
+                .or_insert_with(|| crate::models::ModelUsage {
+                    model: model_id.to_string(),
+                    cost: Some(0.0),
+                    ..Default::default()
+                });
+            merge_model_usage(bucket, input, output, cache_read, cache_write, cost);
+        } else {
+            merge_model_usage(&mut entry.unassigned, input, output, cache_read, cache_write, cost);
+        }
+    }
+
+    /// Assigns any tokens recorded before a session's model was announced to
+    /// `model`, estimating their cost if it was unknown when recorded.
+    pub fn attribute_unassigned(
+        &mut self,
+        model: &str,
+        estimate: impl Fn(&str, u64, u64, u64, u64) -> Option<f64>,
+    ) {
+        let model_id = model.trim();
+        if model_id.is_empty() {
+            return;
+        }
+        for entry in self.days.values_mut() {
+            if entry.unassigned.tokens() == 0 {
+                continue;
+            }
+            let unassigned = std::mem::replace(
+                &mut entry.unassigned,
+                crate::models::ModelUsage {
+                    cost: Some(0.0),
+                    ..Default::default()
+                },
+            );
+            let cost = unassigned.cost.or_else(|| {
+                estimate(
+                    model_id,
+                    unassigned.input,
+                    unassigned.output,
+                    unassigned.cache_read,
+                    unassigned.cache_write,
+                )
+            });
+            let bucket = entry
+                .models
+                .entry(model_id.to_string())
+                .or_insert_with(|| crate::models::ModelUsage {
+                    model: model_id.to_string(),
+                    cost: Some(0.0),
+                    ..Default::default()
+                });
+            merge_model_usage(
+                bucket,
+                unassigned.input,
+                unassigned.output,
+                unassigned.cache_read,
+                unassigned.cache_write,
+                cost,
+            );
+        }
+    }
+
+    /// Sums unrounded costs across every day and model in this session,
+    /// returning `None` if any token bucket had an unknown price.
+    pub fn total_cost(&self) -> Option<f64> {
+        let mut total = Some(0.0);
+        for bucket in self.days.values() {
+            for item in bucket.models.values() {
+                total = match (total, item.cost) {
+                    (Some(sum), Some(cost)) => Some(sum + cost),
+                    _ => None,
+                };
+            }
+            if bucket.unassigned.tokens() > 0 {
+                total = match (total, bucket.unassigned.cost) {
+                    (Some(sum), Some(cost)) => Some(sum + cost),
+                    _ => None,
+                };
+            }
+        }
+        total.map(|cost| (cost * 10_000.0).round() / 10_000.0)
     }
 
     pub fn into_vec(self) -> Vec<crate::models::DayUsage> {
         self.days
             .into_values()
-            .map(|mut day| {
-                day.cost = day.cost.map(|cost| (cost * 10_000.0).round() / 10_000.0);
-                day
+            .map(|bucket| {
+                let mut day_cost = Some(0.0);
+                let mut models: Vec<crate::models::ModelUsage> = bucket
+                    .models
+                    .into_values()
+                    .map(|mut item| {
+                        day_cost = match (day_cost, item.cost) {
+                            (Some(total), Some(cost)) => Some(total + cost),
+                            _ => None,
+                        };
+                        item.cost = item.cost.map(|cost| (cost * 10_000.0).round() / 10_000.0);
+                        item
+                    })
+                    .collect();
+                if bucket.unassigned.tokens() > 0 {
+                    day_cost = match (day_cost, bucket.unassigned.cost) {
+                        (Some(total), Some(cost)) => Some(total + cost),
+                        _ => None,
+                    };
+                }
+                models.sort_by(|a, b| b.tokens().cmp(&a.tokens()).then_with(|| a.model.cmp(&b.model)));
+                crate::models::DayUsage {
+                    day: bucket.day,
+                    input: bucket.input,
+                    output: bucket.output,
+                    cache_read: bucket.cache_read,
+                    cache_write: bucket.cache_write,
+                    cost: day_cost.map(|cost| (cost * 10_000.0).round() / 10_000.0),
+                    models,
+                }
             })
             .collect()
     }
