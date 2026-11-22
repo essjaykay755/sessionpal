@@ -240,6 +240,7 @@ fn transcript(connection: &Connection, id: &str) -> Transcript {
 #[derive(Default)]
 struct Generations {
     usage_by_model: BTreeMap<Option<String>, UsageBreakdown>,
+    incomplete_models: HashSet<Option<String>>,
     models: Vec<String>,
 }
 
@@ -254,6 +255,7 @@ impl Generations {
             total.output = total.output.saturating_add(usage.output);
             total.cache_read = total.cache_read.saturating_add(usage.cache_read);
             total.cost = total.cost.and_then(|cost| {
+                if self.incomplete_models.contains(model) { return None; }
                 let id = model.as_deref()?;
                 pricing::estimate(id, usage.input, usage.output, usage.cache_read, 0)
                     .map(|amount| cost + amount)
@@ -272,8 +274,10 @@ impl Generations {
                 if usage.is_empty() {
                     return None;
                 }
-                let cost = pricing::estimate(id, usage.input, usage.output, usage.cache_read, 0)
-                    .map(|amount| (amount * 10_000.0).round() / 10_000.0);
+                let cost = if self.incomplete_models.contains(model) { None } else {
+                    pricing::estimate(id, usage.input, usage.output, usage.cache_read, 0)
+                        .map(|amount| (amount * 10_000.0).round() / 10_000.0)
+                };
                 Some(ModelUsage {
                     model: id.to_string(),
                     input: usage.input,
@@ -446,11 +450,17 @@ fn read_generations(connection: &Connection, into: &mut Generations) {
         let Some(usage) = message_field(generation, 4) else {
             continue;
         };
-        let totals = into.usage_by_model.entry(model).or_default();
+        let totals = into.usage_by_model.entry(model.clone()).or_default();
         for (field, value) in fields(usage) {
             let Field::Number(count) = value else {
                 continue;
             };
+            // Protobuf int64 negative sentinels are encoded as large varints.
+            // They are not token counts and must not pollute totals.
+            if matches!(field, 2 | 3 | 5) && i64::try_from(count).is_err() {
+                into.incomplete_models.insert(model.clone());
+                continue;
+            }
             match field {
                 // Uncached input, output (thinking included) and cached input.
                 2 => totals.input = totals.input.saturating_add(count),

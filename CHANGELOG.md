@@ -21,6 +21,7 @@ the `## [version] - YYYY-MM-DD` form.
 
 ### Fixed
 
+- Ignore negative Antigravity token counters and leave affected cost estimates unavailable instead of showing enormous values.
 - Improve model pricing and usage calculations for sessions with model changes and cached tokens.
 
 ## [0.6.3] - 2026-11-21

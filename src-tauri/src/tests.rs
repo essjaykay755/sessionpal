@@ -915,6 +915,23 @@ fn antigravity_fixture(dir: &Path) -> PathBuf {
 }
 
 #[test]
+fn antigravity_ignores_negative_encoded_token_counts() {
+    use crate::agents::antigravity;
+    let dir = TempDir::new().unwrap();
+    let index = antigravity_fixture(dir.path());
+    let db = Connection::open(dir.path().join("conversations/conv-1.db")).unwrap();
+    db.execute("UPDATE gen_metadata SET data = ?1", [antigravity_generation("claude-opus-5-5-high", None, u64::MAX, 200, 5000)]).unwrap();
+    drop(db);
+    let sessions = antigravity::scan(&[index]);
+    let usage = sessions[0].usage.as_ref().unwrap();
+    assert_eq!((usage.input, usage.output, usage.cache_read), (550, 400, 10_000));
+    assert_eq!(usage.cost, None);
+    let model = sessions[0].model_usage.iter().find(|item| item.model == "claude-opus-5-5").unwrap();
+    assert_eq!(model.input, 0);
+    assert_eq!(model.cost, None);
+}
+
+#[test]
 fn reads_antigravity_conversations() {
     use crate::agents::antigravity;
     let dir = TempDir::new().unwrap();

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{AgentDetection, AgentId, SessionSummary};
 
-const FORMAT: u32 = 5;
+const FORMAT: u32 = 6;
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SESSIONS_FILE: &str = "library-sessions.json";
 const DETECTIONS_FILE: &str = "library-agents.json";
