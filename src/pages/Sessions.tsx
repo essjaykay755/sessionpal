@@ -72,6 +72,7 @@ import {
 } from "../components/ui";
 
 type SortKey = "recent" | "oldest" | "tokens" | "cost" | "size";
+type TranscriptJump = { id: string | null; sequence: number; align?: ScrollLogicalPosition };
 
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
   { value: "recent", label: "Most recent" },
@@ -158,9 +159,8 @@ export default function SessionsPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
   const [tab, setTab] = useState<"conversation" | "details">("conversation");
-  const [transcriptJump, setTranscriptJump] = useState<{ id: string | null; sequence: number } | null>(null);
+  const [transcriptJump, setTranscriptJump] = useState<TranscriptJump | null>(null);
   const lastRequested = useRef<{ id: string; scan: string } | null>(null);
-  const transcriptRef = useRef<HTMLDivElement>(null);
 
   const activeAgent = agentFocus;
 
@@ -242,7 +242,13 @@ export default function SessionsPage() {
     [sessions, selectedSessionId],
   );
   const activeDetail = detail && detail.id === selectedSessionId ? detail : null;
+  const messages = activeDetail?.messages;
+  const sections = useMemo(() => (messages ? conversationSections(messages) : []), [messages]);
   const busy = selectedSessionId !== null && !activeDetail && detailLoading;
+
+  const jumpToMessage = (id: string | null, align?: ScrollLogicalPosition) => {
+    setTranscriptJump((current) => ({ id, align, sequence: (current?.sequence ?? 0) + 1 }));
+  };
   const visibleSessions = filtered.slice(0, visible);
   const projectTotals = useMemo(
     () => (project === "all" ? null : usageTotals(filtered)),
@@ -716,27 +722,29 @@ export default function SessionsPage() {
                   </div>
                 </div>
                 {tab === "conversation" && activeDetail.messages.length > 0 && (
-                  <ConversationNavigation key={activeDetail.id} detail={activeDetail} onJump={(id) => setTranscriptJump((current) => ({ id, sequence: (current?.sequence ?? 0) + 1 }))} />
+                  <ConversationNavigation key={activeDetail.id} detail={activeDetail} sections={sections} onJump={jumpToMessage} />
                 )}
               </header>
 
-              <div ref={transcriptRef} className="min-h-0 flex-1 overflow-y-auto">
-                {tab === "conversation" ? (
-                  <Transcript
-                    detail={activeDetail}
-                    scrollRoot={transcriptRef}
-                    navigation={transcriptJump}
-                    focus={
-                      jump && jump.sessionId === activeDetail.id
-                        ? { messageId: jump.messageId, words: contentWords(query) }
-                        : null
-                    }
-                  />
-                ) : (
+              {tab === "conversation" ? (
+                <Transcript
+                  key={activeDetail.id}
+                  detail={activeDetail}
+                  sections={sections}
+                  navigation={transcriptJump}
+                  onSectionJump={(id) => jumpToMessage(id, "start")}
+                  focus={
+                    jump && jump.sessionId === activeDetail.id
+                      ? { messageId: jump.messageId, words: contentWords(query) }
+                      : null
+                  }
+                />
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto">
                   <DetailsPanel
                     detail={activeDetail}
                     showCosts={settings.showCosts}
-                    onModelJump={(id) => { setTab("conversation"); setTranscriptJump((current) => ({ id, sequence: (current?.sequence ?? 0) + 1 })); }}
+                    onModelJump={(id) => { setTab("conversation"); jumpToMessage(id); }}
                     onExport={() => openDialog({ kind: "export-sessions", ids: [activeDetail.id] })}
                     onReveal={() => void revealLocation(activeDetail.path, activeDetail.title)}
                     onCopyPath={() => void copyPath(activeDetail.path)}
@@ -744,8 +752,8 @@ export default function SessionsPage() {
                       openDialog({ kind: "delete-sessions", ids: [activeDetail.id] })
                     }
                   />
-                )}
-              </div>
+                </div>
+              )}
             </>
           )}
         </section>
@@ -787,6 +795,30 @@ function TabButton({
 /* ------------------------------------------------------------------ */
 
 const TRANSCRIPT_BATCH = 120;
+const MIN_SECTION_TURNS = 6;
+
+type ConversationSection = { id: string; label: string; preview: string };
+
+function messageExcerpt(content: string, limit: number): string {
+  const text = content.trim().replace(/\s+/g, " ");
+  return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text;
+}
+
+function conversationSections(messages: Message[]): ConversationSection[] {
+  const sections: ConversationSection[] = [];
+  let section: ConversationSection | undefined;
+
+  for (const message of messages) {
+    if (message.role === "user" && !isInternalContext(message)) {
+      section = { id: message.id, label: messageExcerpt(message.content, 80) || "User message", preview: "" };
+      sections.push(section);
+    } else if (message.role === "assistant" && section && !section.preview) {
+      section.preview = messageExcerpt(message.content, 240);
+    }
+  }
+
+  return sections;
+}
 
 /** Where a conversation matched a text search, with the matches marked. */
 function MatchSnippet({ hit, agent }: { hit: ContentHit; agent: AgentId }) {
@@ -851,62 +883,174 @@ function modelHistoryNotice(agent: AgentId): string | null {
   return null;
 }
 
-function ConversationNavigation({ detail, onJump }: { detail: SessionDetail; onJump: (id: string | null) => void }) {
+function ConversationNavigation({ detail, sections, onJump }: {
+  detail: SessionDetail;
+  sections: ConversationSection[];
+  onJump: (id: string | null) => void;
+}) {
   const [selected, setSelected] = useState("");
   const changes = useMemo(() => modelChanges(detail.agent, detail.messages), [detail.agent, detail.messages]);
   const entries = useMemo(() => {
-    const prompts: { id: string; label: string }[] = [];
     const models: { id: string; label: string }[] = [];
     const errors: { id: string; label: string }[] = [];
     for (const message of detail.messages) {
-      if (message.role === "user" && !isInternalContext(message)) {
-        prompts.push({ id: message.id, label: message.content.replace(/\s+/g, " ").trim().slice(0, 80) || "User message" });
-      }
       const model = changes.get(message.id);
       if (model) models.push({ id: message.id, label: model });
       if (message.role === "tool" && message.toolStatus === "error") {
         errors.push({ id: message.id, label: message.toolName || "Tool error" });
       }
     }
-    return { prompts, models, errors };
+    return { models, errors };
   }, [detail.messages, changes]);
-  const choices = [...entries.prompts, ...entries.models, ...entries.errors];
+  const choices = [...sections, ...entries.models, ...entries.errors];
   return (
     <div className="flex items-center gap-2 border-t border-line/[0.055] py-2">
       <label htmlFor="conversation-jump" className="shrink-0 text-12 text-muted">Jump to</label>
       <select id="conversation-jump" value={selected} onChange={(event) => { const value = event.target.value; setSelected(value); const choice = choices[Number(value)]; if (value !== "" && choice) onJump(choice.id); }} className="min-w-0 flex-1 rounded-lg border border-line/[0.08] bg-panel px-2 py-1.5 text-12 text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500">
         <option value="">Choose a moment…</option>
-        {entries.prompts.length > 0 && <optgroup label="Your messages">{entries.prompts.map((entry, index) => <option key={`prompt-${entry.id}-${index}`} value={index}>{entry.label}</option>)}</optgroup>}
-        {entries.models.length > 0 && <optgroup label="Model changes">{entries.models.map((entry, index) => <option key={`model-${entry.id}-${index}`} value={entries.prompts.length + index}>{entry.label}</option>)}</optgroup>}
-        {entries.errors.length > 0 && <optgroup label="Tool errors">{entries.errors.map((entry, index) => <option key={`error-${entry.id}-${index}`} value={entries.prompts.length + entries.models.length + index}>{entry.label}</option>)}</optgroup>}
+        {sections.length > 0 && <optgroup label="Your messages">{sections.map((entry, index) => <option key={`prompt-${entry.id}-${index}`} value={index}>{entry.label}</option>)}</optgroup>}
+        {entries.models.length > 0 && <optgroup label="Model changes">{entries.models.map((entry, index) => <option key={`model-${entry.id}-${index}`} value={sections.length + index}>{entry.label}</option>)}</optgroup>}
+        {entries.errors.length > 0 && <optgroup label="Tool errors">{entries.errors.map((entry, index) => <option key={`error-${entry.id}-${index}`} value={sections.length + entries.models.length + index}>{entry.label}</option>)}</optgroup>}
       </select>
       <button type="button" onClick={() => { setSelected(""); onJump(null); }} className="shrink-0 rounded-lg px-2 py-1.5 text-12 font-medium text-copper-600 hover:bg-sunken/60 dark:text-copper-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-500">Latest</button>
     </div>
   );
 }
 
+function ConversationSectionRail({ sections, scrollRoot, contentRef, renderedCount, complete, onJump }: {
+  sections: ConversationSection[];
+  scrollRoot: React.RefObject<HTMLDivElement | null>;
+  contentRef: React.RefObject<HTMLDivElement | null>;
+  renderedCount: number;
+  complete: boolean;
+  onJump: (id: string) => void;
+}) {
+  const railRef = useRef<HTMLElement>(null);
+  const [activeId, setActiveId] = useState(sections[0].id);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const root = scrollRoot.current;
+    const content = contentRef.current;
+    if (!root || !content) return;
+    const anchors = content.querySelectorAll<HTMLElement>("[data-conversation-section]");
+    let frame = 0;
+
+    const update = () => {
+      frame = 0;
+      // Read the last section start above the top of the reading area.
+      const readingLine = root.getBoundingClientRect().top + 12;
+      let start = 0;
+      let end = anchors.length;
+      while (start < end) {
+        const middle = Math.floor((start + end) / 2);
+        if (anchors[middle].getBoundingClientRect().top <= readingLine) start = middle + 1;
+        else end = middle;
+      }
+      const atEnd = complete && root.scrollTop > 0 && root.scrollHeight - root.scrollTop - root.clientHeight <= 2;
+      const current = atEnd ? anchors[anchors.length - 1] : anchors[Math.max(0, start - 1)];
+      if (current?.dataset.conversationSection) setActiveId(current.dataset.conversationSection);
+    };
+
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    const resize = new ResizeObserver(schedule);
+    resize.observe(root);
+    resize.observe(content);
+    root.addEventListener("scroll", schedule, { passive: true });
+    schedule();
+    return () => {
+      root.removeEventListener("scroll", schedule);
+      resize.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, [sections, renderedCount, complete, scrollRoot, contentRef]);
+
+  useEffect(() => {
+    railRef.current?.querySelector('[aria-current="location"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId]);
+
+  return (
+    <div className="conversation-section-gutter shrink-0 items-center border-r border-line/[0.06] px-1.5">
+      <nav
+        ref={railRef}
+        aria-label="Conversation sections"
+        className="no-scrollbar flex max-h-[min(19rem,calc(100%-1.5rem))] flex-col overflow-y-auto overscroll-contain px-0.5 py-1"
+        onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusedId(null); }}
+        onKeyDown={(event) => {
+          if (!(event.target instanceof HTMLButtonElement)) return;
+          const index = Number(event.target.dataset.sectionIndex);
+          let next: number;
+          switch (event.key) {
+            case "ArrowUp": next = Math.max(0, index - 1); break;
+            case "ArrowDown": next = Math.min(sections.length - 1, index + 1); break;
+            case "Home": next = 0; break;
+            case "End": next = sections.length - 1; break;
+            default: return;
+          }
+          event.preventDefault();
+          event.currentTarget.querySelector<HTMLButtonElement>(`[data-section-index="${next}"]`)?.focus();
+        }}
+      >
+        {sections.map((section, index) => (
+          <Tooltip
+            key={section.id}
+            label={
+              <span className="block w-[min(18rem,calc(100vw-5rem))] p-1">
+                <span className="block font-semibold text-fg">{section.label}</span>
+                {section.preview && <span className="mt-1 block text-muted">{section.preview}</span>}
+              </span>
+            }
+            delay={180}
+          >
+            <button
+              type="button"
+              data-section-index={index}
+              aria-label={`Section ${index + 1}. ${section.label}`}
+              aria-current={section.id === activeId ? "location" : undefined}
+              tabIndex={section.id === (focusedId ?? activeId) ? 0 : -1}
+              onFocus={() => setFocusedId(section.id)}
+              onClick={() => onJump(section.id)}
+              className="group flex h-6 w-7 items-center justify-center rounded-md hover:bg-line/[0.045] focus-visible:outline-offset-0"
+            >
+              <span aria-hidden="true" className={cn(
+                "h-0.5 rounded-full transition-[width,background-color]",
+                section.id === activeId
+                  ? "w-[18px] bg-copper-600 dark:bg-copper-300"
+                  : "w-2.5 bg-faint/65 group-hover:w-3.5 group-hover:bg-fg/65 group-focus-visible:w-3.5 group-focus-visible:bg-fg/65",
+              )} />
+            </button>
+          </Tooltip>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 function Transcript({
   detail,
-  scrollRoot,
+  sections,
   focus,
   navigation,
+  onSectionJump,
 }: {
   detail: SessionDetail;
-  scrollRoot: React.RefObject<HTMLDivElement | null>;
+  sections: ConversationSection[];
   /** A message to scroll to, with the searched words to mark in it. */
   focus?: { messageId: string; words: string[] } | null;
-  navigation: { id: string | null; sequence: number } | null;
+  navigation: TranscriptJump | null;
+  onSectionJump: (id: string) => void;
 }) {
   // Long sessions can hold thousands of messages. Render them in batches as the
   // reader scrolls instead of mounting everything at once.
   const [count, setCount] = useState(TRANSCRIPT_BATCH);
   const sentinel = useRef<HTMLDivElement>(null);
+  const scrollRoot = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const total = detail.messages.length;
-
-  useEffect(() => {
-    setCount(TRANSCRIPT_BATCH);
-    scrollRoot.current?.scrollTo({ top: 0 });
-  }, [detail.id, scrollRoot]);
+  const showSections = sections.length >= MIN_SECTION_TURNS || (total > TRANSCRIPT_BATCH && sections.length > 1);
+  const sectionIds = useMemo(() => showSections ? new Set(sections.map((section) => section.id)) : null, [sections, showSections]);
 
   useEffect(() => {
     const node = sentinel.current;
@@ -960,7 +1104,6 @@ function Transcript({
   useEffect(() => clearHighlights, [detail.id]);
 
   const navigated = useRef<string | null>(null);
-  useEffect(() => { navigated.current = null; }, [detail.id]);
   useEffect(() => {
     if (!navigation) return;
     const key = `${detail.id}:${navigation.sequence}`;
@@ -982,15 +1125,16 @@ function Transcript({
         if (group instanceof HTMLDetailsElement) group.open = true;
         step.open = true;
       }
-      (step ?? node).scrollIntoView({ block: "center" });
+      const target = navigation.align === "start" ? node.closest("[data-conversation-section]") : null;
+      (target ?? step ?? node).scrollIntoView({ block: navigation.align ?? "center" });
     }
     navigated.current = key;
   }, [navigation, detail.id, detail.messages, count, total, scrollRoot]);
 
   const remaining = total - count;
 
-  return (
-    <div className="mx-auto w-full max-w-[780px] px-5 py-5 sm:px-8 sm:py-6">
+  const content = (
+    <div ref={contentRef} className="mx-auto w-full max-w-[780px] px-5 py-5 sm:px-8 sm:py-6">
       {modelNotice && (
         <div className="mb-4 flex gap-2 rounded-xl border border-line/[0.08] bg-sunken/40 px-3 py-2.5 text-12 text-muted">
           <WarningCircle className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
@@ -999,7 +1143,7 @@ function Transcript({
       )}
       <div className="flex flex-col">
         {items.map((item) => (
-          <div key={item.key} className="transcript-row">
+          <div key={item.key} className="transcript-row" data-conversation-section={sectionIds?.has(item.key) ? item.key : undefined}>
             {item.showDay && (
               <div className="my-5 flex items-center gap-3 first:mt-0">
                 <span className="text-12 font-medium uppercase tracking-[0.12em] text-faint">
@@ -1040,6 +1184,24 @@ function Transcript({
           </Button>
         </div>
       )}
+    </div>
+  );
+
+  return (
+    <div className="conversation-reader flex min-h-0 flex-1">
+      {showSections && (
+        <ConversationSectionRail
+          sections={sections}
+          scrollRoot={scrollRoot}
+          contentRef={contentRef}
+          renderedCount={count}
+          complete={remaining <= 0}
+          onJump={onSectionJump}
+        />
+      )}
+      <div ref={scrollRoot} className="min-w-0 flex-1 overflow-y-auto">
+        {content}
+      </div>
     </div>
   );
 }

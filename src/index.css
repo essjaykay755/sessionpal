@@ -576,6 +576,20 @@
   contain-intrinsic-size: auto 96px;
 }
 
+.conversation-reader {
+  container-type: inline-size;
+}
+
+.conversation-section-gutter {
+  display: none;
+}
+
+@container (min-width: 440px) {
+  .conversation-section-gutter {
+    display: flex;
+  }
+}
+
 .prose-den h3,
 .prose-den h4 {
   margin: 1.1em 0 0.4em;

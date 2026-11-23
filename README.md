@@ -2,7 +2,7 @@
 
 **Your AI coding sessions, all in one place.**
 
-Latest release **v0.7.0** adds a model history calendar, per-model usage attribution, and support for archived and compressed Codex sessions.
+Latest release **v0.8.0** adds section previews and one-click navigation for long conversations.
 
 SessionPal is a local-first desktop library for sessions from **Claude Code, Codex, Cursor, OpenCode, and Google Antigravity**. Find past conversations, explore usage, and back up sessions on your own computer.
 

@@ -7,6 +7,13 @@ All notable changes to SessionPal are documented here. The format follows
 The app reads this file to show its version history, so keep the headings in
 the `## [version] - YYYY-MM-DD` form.
 
+## [0.8.0] - 2026-11-23
+
+### Added
+
+- Browse long conversations with a section rail organized by user prompt. Hover over a marker to preview the prompt and first reply, or select it to jump there.
+- Follow the highlighted section as you scroll, or navigate markers with the keyboard. On narrow layouts, use Jump to to reach the same turns.
+
 ## [0.7.0] - 2026-11-22
 
 ### Added

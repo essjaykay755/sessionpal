@@ -39,7 +39,7 @@ export function Tooltip({
   disabled,
   delay = 320,
 }: {
-  label: string;
+  label: ReactNode;
   side?: Side;
   children: ReactNode;
   disabled?: boolean;
@@ -119,6 +119,7 @@ export function Tooltip({
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
+      onKeyDown={(event) => { if (event.key === "Escape") hide(); }}
     >
       {children}
       {typeof document !== "undefined" &&
